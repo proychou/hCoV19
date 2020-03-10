@@ -45,8 +45,8 @@ conseq<-clean_consensus_hcov(sampname,remapped_bamfname,mappedtoref_bamfname,ref
 if(conseq==TRUE){
 	if(!dir.exists('./annotations_prokka')) dir.create('./annotations_prokka');
 
-  #Remove all Ns at the beginning and end of the seq, write to folder
-  fname<-paste('./consensus_seqs/',sampname,'_consensus.fasta',sep='')
+  #Write consensus seq to folder for prokka
+  fname<-paste('./consensus_seqs/',sampname,'.fasta',sep='')
   con_seq<-readDNAStringSet(fname);
   names(con_seq)<-substring(names(con_seq),1,20); #prokka needs contig name to be <=20 chars long
   sampdir<-paste('./annotations_prokka/',sampname,sep='');
