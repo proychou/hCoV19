@@ -34,7 +34,7 @@ if(length(args)==0){
 # sampname='GH120016_CGATCCAC-TCGCGCAT_L002'
 # scaffname=paste0('/fh/fast/jerome_k/RSV_WGS/contigs/',sampname,'/scaffolds.fasta')
 # reffname='./refs/NC_045512.2.fasta'
-
+# ncores
 
 #First import scaffolds and filter by length (>200) and coverage (>10x)
 contigs<-readDNAStringSet(scaffname,format='fasta')
@@ -56,14 +56,14 @@ system(paste('bwa mem', reffname, scaffname_filtered, '>', samfname))
 #Compress and clean up
 print('Converting sam to bam ...')
 bamfname<-gsub('.sam','.bam',samfname)
-system(paste('samtools view -bh -o',
+system(paste('samtools view -bh -@',ncores, '-o',
              bamfname,samfname,
              '-T',reffname))
 print('done ...')
 file.remove(samfname);
 rm(samfname)
 print('Sort bam ...')
-system(paste('samtools sort -o',
+system(paste('samtools sort -@',ncores, '-o',
              gsub('.bam','.sorted.bam',bamfname),
              bamfname))
 file.remove(bamfname);

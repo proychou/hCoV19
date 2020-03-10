@@ -240,7 +240,7 @@ fi
 
 # Now call an R script that merges assembly and mapping and ultimately makes the consensus sequence 
 scaffname='./contigs/'$sampname'/scaffolds.fasta'
-Rscript --vanilla hcov_make_seq.R sampname=\"$sampname\" reffname=\"$ref_fasta\" scaffname=\"$scaffname\"
+Rscript --vanilla hcov_make_seq.R sampname=\"$sampname\" reffname=\"$ref_fasta\" scaffname=\"$scaffname\" ncores=\"$SLURM_CPUS_PER_TASK\"
 
 
 #Remap reads to "new" reference
