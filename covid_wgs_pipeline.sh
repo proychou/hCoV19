@@ -268,7 +268,7 @@ mv './remapped_reads/'$sampname'.sorted.bam' $remapped_bamfname
 printf "\n\nGenerating consensus sequence ... \n\n\n"
 mkdir -p ./consensus_seqs
 mkdir -p ./stats
-Rscript --vanilla hcov_generate_consensus.R sampname=\"$sampname\" reffname=\"$ref_fasta\" remapped_bamfname=\"$remapped_bamfname\" mappedtoref_bamfname=\"$mappedtoref_bam\"
+Rscript --vanilla hcov_generate_consensus.R sampname=\"$sampname\" ref=\"$ref_bowtie\" remapped_bamfname=\"$remapped_bamfname\" mappedtoref_bamfname=\"$mappedtoref_bam\"
 
 #Annotate
 printf "\n\nAnnotating with prokka ... \n\n\n"

@@ -37,7 +37,6 @@ if(length(args)==0){
 
 #Files, directories, target site
 mapped_reads_folder<-'./mapped_reads/';
-con_seqs_dir<-'./consensus_seqs_all';
 
 #Make consensus sequence--returns TRUE if this worked
 conseq<-clean_consensus_hcov(sampname,remapped_bamfname,mappedtoref_bamfname,ref);
@@ -47,13 +46,12 @@ if(conseq==TRUE){
 	if(!dir.exists('./annotations_prokka')) dir.create('./annotations_prokka');
 
   #Remove all Ns at the beginning and end of the seq, write to folder
-  fname<-grep(sampname,list.files(con_seqs_dir,full.names=T),value=T);
+  fname<-paste('./consensus_seqs/',sampname,'.fasta',sep='')
   con_seq<-readDNAStringSet(fname);
-  con_seq_trimmed<-DNAStringSet(gsub("N*N$",'',gsub("^N*",'',as.character(con_seq))));
-  names(con_seq_trimmed)<-substring(names(con_seq),1,20); #prokka needs contig name to be <=20 chars long
+  names(con_seq)<-substring(names(con_seq),1,20); #prokka needs contig name to be <=20 chars long
   sampdir<-paste('./annotations_prokka/',sampname,sep='');
   if(!dir.exists(sampdir)) dir.create(sampdir); #create folder for the sample
-  writeXStringSet(con_seq_trimmed,file=paste(sampdir,'/',sampname,'.fa',sep=''),format='fasta');
+  writeXStringSet(con_seq,file=paste(sampdir,'/',sampname,'.fa',sep=''),format='fasta');
 	
 }else{
 	print('Failed to generate consensus sequences.')
