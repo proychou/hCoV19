@@ -40,7 +40,7 @@ mapped_reads_folder<-'./mapped_reads/';
 con_seqs_dir<-'./consensus_seqs_all';
 
 #Make consensus sequence--returns TRUE if this worked
-conseq<-clean_consensus_tp(sampname,remapped_bamfname,mappedtoref_bamfname,ref);
+conseq<-clean_consensus_hcov(sampname,remapped_bamfname,mappedtoref_bamfname,ref);
 
 #Prepare seqs for annotation -- will make separate folders for A and B
 if(conseq==TRUE){

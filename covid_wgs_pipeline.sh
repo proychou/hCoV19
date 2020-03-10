@@ -52,7 +52,7 @@ export PATH=$PATH:$EBROOTPROKKA/bin:$EBROOTPROKKA/db:
 echo "Number of cores used: "$SLURM_CPUS_PER_TASK
 # echo "Path: "$PATH
 
-while getopts ":1:2:s:faq" opt; do
+while getopts ":1:2:u:s:faq" opt; do
 	case $opt in
 		1) in_fastq_r1="$OPTARG"
 			paired="true"
@@ -60,7 +60,7 @@ while getopts ":1:2:s:faq" opt; do
 		2) in_fastq_r2="$OPTARG"
 			paired="true"
 		;;
-		s) in_fastq="$OPTARG"
+		u) in_fastq="$OPTARG"
 			paired="false"
 		;;
 		f) filter="true"
@@ -68,6 +68,8 @@ while getopts ":1:2:s:faq" opt; do
 		a) adapter_trim="true"
 		;;
 		q) qual_trim="true"
+		;;
+		s) sampname="$OPTARG"
 		;;
 		\?) echo "Invalid option -$OPTARG" >&2
     	;;
@@ -83,6 +85,9 @@ ref_bowtie='NC_045512.2'
 ##  PAIRED-END  ##
 ## paired end not tested as everything right now is single-end 
 if [[ $paired == "true" ]]
+
+printf "Paired-end runs not tested yet. Exiting."
+
 # then
 # if [ -z $in_fastq_r1 ] || [ -z $in_fastq_r2 ]
 # then
@@ -158,14 +163,10 @@ else
 if [[ $paired == "false" ]]
 then
 
-printf "Single-end runs not tested yet. Exiting."
-
-# if [ -z $in_fastq ]
+if [ -z $in_fastq ]
 then
 echo "Missing input argument."
 fi
-
-sampname=$(basename ${in_fastq%%_R1_001.fastq*})
 
 #FastQC report on raw reads
 printf "\n\nFastQC report on raw reads ... \n\n\n"
@@ -174,6 +175,7 @@ fastqc -o ./fastqc_reports_raw -t $SLURM_CPUS_PER_TASK $in_fastq
 
 #Adapter trimming with bbduk
 if [[ $adapter_trim == "true" ]]
+then
 printf "\n\nAdapter trimming ... \n\n\n"
 mkdir -p ./preprocessed_fastq
 tmp_fastq='./preprocessed_fastq/'$sampname'_trimmed_tmp.fastq.gz'
@@ -189,6 +191,7 @@ fi
   
 #Quality trimming
 if [[ $qual_trim == "true" ]]
+then
 printf "\n\nQuality trimming ... \n\n\n"
 mkdir -p ./preprocessed_fastq
 processed_fastq_old=$processed_fastq
@@ -196,6 +199,15 @@ processed_fastq='./preprocessed_fastq/'$sampname'_preprocessed.fastq.gz'
 
 bbduk.sh in=$processed_fastq_old out=$processed_fastq t=$SLURM_CPUS_PER_TASK qtrim=rl trimq=20 maq=10 overwrite=TRUE minlen=20
 fi
+
+#Map reads to reference
+printf "\n\nMapping reads to reference seqs hsv1_ref, hsv2_ref_hg52 and hsv2_sd90e ... \n\n\n"
+mkdir -p ./mapped_reads
+mappedtoref_bam='./mapped_reads/'$sampname'.bam'
+bowtie2 -x ./refs/$ref_bowtie -U $processed_fastq -p ${SLURM_CPUS_PER_TASK} | samtools view -bS - > $mappedtoref_bam
+samtools sort -@ ${SLURM_CPUS_PER_TASK} -o './mapped_reads/'$sampname'.sorted.bam' $mappedtoref_bam 
+rm $mappedtoref_bam 
+mv './mapped_reads/'$sampname'.sorted.bam' $mappedtoref_bam 
 
 
 #Use bbduk to filter viral reads 
@@ -206,24 +218,15 @@ processed_fastq_old=$processed_fastq
 processed_fastq='./preprocessed_fastq/'$sampname'_matched.fastq.gz'
 unmatched_fastq='./filtered_fastq/'$sampname'_unmatched.fastq.gz' 
 filter_stats='./preprocessed_fastq/'$sampname'_stats_filtering.txt'
-
 bbduk.sh in=$processed_fastq_old out=$unmatched_fastq outm=$processed_fastq ref=$ref_fasta k=31 hdist=2 stats=$filter_stats overwrite=TRUE t=$SLURM_CPUS_PER_TASK
+else 
+processed_fastq='./preprocessed_fastq/'$sampname'_preprocessed.fastq.gz'
 fi
 
 #FastQC report on processed reads
 printf "\n\nFastQC report on preprocessed reads ... \n\n\n"
 mkdir -p ./fastqc_reports_preprocessed
 fastqc -o ./fastqc_reports_preprocessed -t $SLURM_CPUS_PER_TASK $processed_fastq
-
-
-#Map reads to reference
-printf "\n\nMapping reads to reference seqs hsv1_ref, hsv2_ref_hg52 and hsv2_sd90e ... \n\n\n"
-mkdir -p ./mapped_reads
-mappedtoref_bam='./mapped_reads/'$sampname'.bam'
-bowtie2 -x ./refs/$ref -U $processed_fastq -p ${SLURM_CPUS_PER_TASK} | samtools view -bS - > $mappedtoref_bam
-samtools sort -o './mapped_reads/'$sampname'.sorted.bam' $mappedtoref_bam 
-rm $mappedtoref_bam 
-mv './mapped_reads/'$sampname'.sorted.bam' $mappedtoref_bam 
 
 
 #Assemble with SPAdes
@@ -236,25 +239,27 @@ fi
 
 
 # Now call an R script that merges assembly and mapping and ultimately makes the consensus sequence 
-Rscript --vanilla hcov_make_seq.R sampname=\"$sampname\" reffname=\"$ref_fasta\" scaffname='./contigs/'$sampname'/scaffolds.fasta'
+scaffname='./contigs/'$sampname'/scaffolds.fasta'
+Rscript --vanilla hcov_make_seq.R sampname=\"$sampname\" reffname=\"$ref_fasta\" scaffname=\"$scaffname\"
 
 
 #Remap reads to "new" reference
 printf "\n\nRe-mapping reads to assembled sequence ... \n\n\n"
 mkdir -p ./remapped_reads
-remapping_btref='./ref_for_remapping/'$sampname'_aligned_scaffolds_'$ref
+remapping_btref='./ref_for_remapping/'$sampname'_aligned_scaffolds_'$ref_bowtie
 
-bowtie2-build -q './ref_for_remapping/'$sampname'_aligned_scaffolds_'$ref'_consensus.fasta' $remapping_btref
+bowtie2-build -q './ref_for_remapping/'$sampname'_aligned_scaffolds_'$ref_bowtie'_consensus.fasta' $remapping_btref
 remapped_bamfname='./remapped_reads/'$sampname'.bam'
-if [[ $paired == "false" ]]
-bowtie2 -x $remapping_btref -1 './preprocessed_fastq/'$sampname'_preprocessed_paired_r1.fastq.gz' -2 './preprocessed_fastq/'$sampname'_preprocessed_paired_r2.fastq.gz' -p ${SLURM_CPUS_PER_TASK} | samtools view -bS - > $remapped_bamfname
-else
 if [[ $paired == "true" ]]
-bowtie2 -x $remapping_btref -U $processed_fastq -p ${SLURM_CPUS_PER_TASK} | samtools view -bS - > $remapped_bamfname
-fi
+then
+bowtie2 -x $remapping_btref -1 './preprocessed_fastq/'$sampname'_preprocessed_paired_r1.fastq.gz' -2 './preprocessed_fastq/'$sampname'_preprocessed_paired_r2.fastq.gz' -p ${SLURM_CPUS_PER_TASK} | samtools view -bS - > $remapped_bamfname
+elif [[ $paired == "false" ]]
+then
+bowtie2 -x $remapping_btref -U './preprocessed_fastq/'$sampname'_preprocessed.fastq.gz' -p ${SLURM_CPUS_PER_TASK} | samtools view -bS - > $remapped_bamfname
 fi
 
-samtools sort -o './remapped_reads/'$sampname'.sorted.bam' $remapped_bamfname
+
+samtools sort -@ ${SLURM_CPUS_PER_TASK} -o './remapped_reads/'$sampname'.sorted.bam' $remapped_bamfname
 rm $remapped_bamfname
 mv './remapped_reads/'$sampname'.sorted.bam' $remapped_bamfname 
 
