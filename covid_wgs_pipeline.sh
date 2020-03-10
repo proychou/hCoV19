@@ -273,6 +273,6 @@ Rscript --vanilla hcov_generate_consensus.R sampname=\"$sampname\" ref=\"$ref_bo
 #Annotate
 printf "\n\nAnnotating with prokka ... \n\n\n"
 mkdir -p ./annotations_prokka
-prokka --outdir './annotations_prokka/'$sampname'/' --force --kingdom 'Viruses' --genus 'Betacoronavirus' --usegenus --prefix $sampname --proteins ./refs/hcov_proteins.faa  './annotations_prokka/'$sampname'.fa'
+prokka --outdir './annotations_prokka/'$sampname'/' --force --kingdom 'Viruses' --genus 'Betacoronavirus' --usegenus --prefix $sampname --proteins ./refs/hcov_proteins.faa  './annotations_prokka/'$sampname'/'$sampname'.fa'
 
 
