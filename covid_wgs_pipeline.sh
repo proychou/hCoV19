@@ -85,6 +85,7 @@ ref_bowtie='NC_045512.2'
 ##  PAIRED-END  ##
 ## paired end not tested as everything right now is single-end 
 if [[ $paired == "true" ]]
+then
 
 printf "Paired-end runs not tested yet. Exiting."
 
