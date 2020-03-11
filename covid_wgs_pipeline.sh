@@ -202,7 +202,7 @@ bbduk.sh in=$processed_fastq_old out=$processed_fastq t=$SLURM_CPUS_PER_TASK qtr
 fi
 
 #Map reads to reference
-printf "\n\nMapping reads to reference seqs hsv1_ref, hsv2_ref_hg52 and hsv2_sd90e ... \n\n\n"
+printf "\n\nMapping reads to reference ... \n\n\n"
 mkdir -p ./mapped_reads
 mappedtoref_bam='./mapped_reads/'$sampname'.bam'
 bowtie2 -x ./refs/$ref_bowtie -U $processed_fastq -p ${SLURM_CPUS_PER_TASK} | samtools view -bS - > $mappedtoref_bam
@@ -214,7 +214,7 @@ mv './mapped_reads/'$sampname'.sorted.bam' $mappedtoref_bam
 #Use bbduk to filter viral reads 
 if [[ $filter == "true" ]]
 then
-printf "\n\nK-mer filtering using hsv_refs.fasta ... \n\n\n"
+printf "\n\nK-mer filtering using hcov_refs.fasta ... \n\n\n"
 processed_fastq_old=$processed_fastq
 processed_fastq='./preprocessed_fastq/'$sampname'_matched.fastq.gz'
 unmatched_fastq='./filtered_fastq/'$sampname'_unmatched.fastq.gz' 
