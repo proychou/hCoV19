@@ -1,3 +1,4 @@
+#!/usr/bin/env Rscript
 # RSV : This script imports bam files and makes a consensus sequence
 # Pavitra Roychoudhury
 # Adapted from hsv_generate_consensus.R on 6-Mar-19
@@ -5,7 +6,7 @@
 # Built to be called from hhv6_wgs_pipeline.sh with input arguments specifying input filename
 # Requires wgs_functions.R which contains several utility scripts plus multiple R packages listed below
 
-rm(list=ls()); 
+rm(list=ls());
 sessionInfo();
 library(Rsamtools);
 library(GenomicAlignments);
@@ -19,7 +20,7 @@ script<-getURL('https://raw.githubusercontent.com/proychou/ViralWGS/master/wgs_f
 							 ssl.verifypeer=FALSE)
 eval(parse(text=script));
 
-#Get args from command line 
+#Get args from command line
 args<-(commandArgs(TRUE));
 if(length(args)==0){
 	print("No arguments supplied.")
@@ -32,7 +33,7 @@ if(length(args)==0){
 
 #For testing (these args should come from command line)
 # sampname='2016-01040_S451_L001'
-# ref='NC_016842' 
+# ref='NC_016842'
 # remapped_bamfname
 
 #Files, directories, target site
@@ -52,7 +53,7 @@ if(conseq==TRUE){
   sampdir<-paste('./annotations_prokka/',sampname,sep='');
   if(!dir.exists(sampdir)) dir.create(sampdir); #create folder for the sample
   writeXStringSet(con_seq,file=paste(sampdir,'/',sampname,'.fa',sep=''),format='fasta');
-	
+
 }else{
 	print('Failed to generate consensus sequences.')
 }

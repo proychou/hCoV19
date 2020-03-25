@@ -1,3 +1,4 @@
+#!/usr/bin/env Rscript
 # HSV script but works with any viral sequence: This script makes a new reference sequence from de novo assembled scaffolds
 # Pavitra Roychoudhury
 # Sep 2017
@@ -5,7 +6,7 @@
 # Built to be called from hsv_wgs_pipeline.sh with input arguments specifying input filename
 # Requires wgs_functions.R which contains several utility scripts plus multiple R packages listed below
 
-rm(list=ls()); 
+rm(list=ls());
 sessionInfo();
 library(Rsamtools);
 library(GenomicAlignments);
@@ -19,7 +20,7 @@ script<-getURL('https://raw.githubusercontent.com/proychou/ViralWGS/master/wgs_f
 							 ssl.verifypeer=FALSE)
 eval(parse(text=script));
 
-#Get args from command line 
+#Get args from command line
 args<-(commandArgs(TRUE));
 if(length(args)==0){
 	print("No arguments supplied.")
