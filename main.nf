@@ -1,4 +1,4 @@
-seqs = file('test/UWVL20030402-B01-VIRv1_S2_R1_001.fastq.gz')
+seqs = file('test/UWVL20030401-A01-VIRv1_S1_R1_001.fastq.gz')
 reference_fa = file('refs/NC_045512.fasta')
 genbank = file('refs/NC_045512.gb')
 
@@ -324,14 +324,14 @@ process final_seq {
     label 'med_cpu_mem'
 
     input:
-        file('remapped_sorted.bam') from remap_sorted
-        file('sorted.bam') from sorted
+        file('remapped.bam') from remap_sorted
+        file('mapped.bam') from sorted
 
     output:
         file('annotations_prokka/sample/sample.fa') into final_cons
 
     """
-    hcov_generate_consensus.R sampname=\\"sample\\" ref=\\"reference\\" remapped_bamfname=\\"remapped_sorted.bam\\" mappedtoref_bamfname=\\"sorted.bam\\"
+    hcov_generate_consensus.R sampname=\\"sample\\" ref=\\"reference\\" remapped_bamfname=\\"remapped.bam\\" mappedtoref_bamfname=\\"mapped.bam\\"
     """
 }
 
