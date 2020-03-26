@@ -1,7 +1,7 @@
-// TODO: Channel of fastq, tuple [sample name, fastq]
-seqs = file('test/UWVL20030405-E01-VIRv1_S5_R1_001.fastq.gz')
+// TODO: Channel [sample_name, fastq]
+Channel.fromPath('test/*.fastq.gz').into{seqs; for_reporting}
 reference_fa = file('refs/NC_045512.fasta')
-genbank = file('refs/NC_045512.gb')
+reference_gb = file('refs/NC_045512.gb')
 
 // TODO: make separate pipeline for reference creation, store in s3
 process bowtie_index {
@@ -42,7 +42,7 @@ process prokka_index {
     label 'med_cpu_mem'
 
     input:
-        file('reference.gb') from genbank
+        file('reference.gb') from reference_gb
 
     output:
         file('proteins.faa') into prokka_ref
@@ -53,14 +53,13 @@ process prokka_index {
 }
 
 // FastQC report on raw reads
-// TODO: do fastqc on whole channel
 process fastqc_raw_report  {
     container 'quay.io/biocontainers/fastqc:0.11.9--0'
 
     label 'fastqc_mem'
 
     input:
-        file('seqs.fastq.gz') from seqs
+        file('seqs_*.fastq.gz') from for_reporting.collect()
 
     output:
        file('fastqc_reports_raw/*')
@@ -69,7 +68,7 @@ process fastqc_raw_report  {
 
     """
     mkdir fastqc_reports_raw
-    fastqc --outdir fastqc_reports_raw --threads ${task.cpus} seqs.fastq.gz
+    fastqc --outdir fastqc_reports_raw --threads ${task.cpus} seqs_*.fastq.gz
     """
 }
 
@@ -83,7 +82,7 @@ process preprocess {
         file('seqs.fastq.gz') from seqs
 
     output:
-        file('preprocessed.fastq.gz') into preprocessed
+        file('preprocessed.fastq.gz') into (preprocessed, for_reference_mapping, for_consensus_mapping)
 
     """
     bbduk.sh in=seqs.fastq.gz out=right_trimmed.fastq.gz hdist=2 k=21 ktrim=r mink=4 ref=adapters,artifacts threads=${task.cpus}
@@ -99,7 +98,7 @@ process map_to_ref {
     label 'med_cpu_mem'
 
     input:
-        file('seqs.fastq.gz') from preprocessed
+        file('seqs.fastq.gz') from for_reference_mapping
         file('') from bowtie_ref
 
     output:
@@ -122,7 +121,7 @@ process sam_to_bam {
         file('sorted.bam') into sorted
 
     """
-    samtools view --threads ${task.cpus} -o alignment.bam -b alignment.sam
+    samtools view --threads ${task.cpus} -b alignment.sam -o alignment.bam
     samtools sort --threads ${task.cpus} -o sorted.bam alignment.bam
     """
 }
@@ -138,7 +137,7 @@ process filter {
         file('reference.fasta') from reference_fa
 
     output:
-        file('matched.fastq.gz') into filtered
+        file('matched.fastq.gz') into (filtered, for_reporting2)
         file('unmatched.fastq.gz')
         file('stats_filtering.txt')
 
@@ -154,7 +153,7 @@ process fastqc_processed_report  {
     label 'fastqc_mem'
 
     input:
-        file('seqs.fastq.gz') from filtered
+        file('seqs_*.fastq.gz') from for_reporting2.collect()
 
     output:
        file('fastqc_reports_preprocessed/*')
@@ -163,7 +162,7 @@ process fastqc_processed_report  {
 
     """
     mkdir fastqc_reports_preprocessed
-    fastqc --outdir fastqc_reports_preprocessed --threads ${task.cpus} seqs.fastq.gz
+    fastqc --outdir fastqc_reports_preprocessed --threads ${task.cpus} seqs_*.fastq.gz
     """
 }
 
@@ -178,7 +177,7 @@ process assemble {
         file('seqs.fastq.gz') from filtered
 
     output:
-        file('contigs/*') into assembled
+        // file('contigs/*') into assembled
         file('contigs/scaffolds.fasta') into scaffolds
 
     """
@@ -224,14 +223,13 @@ process bowtie_consensus_build {
     """
 }
 
-// TODO: Check to use preprocessed, filtered or raw reads here
 process map_to_consensus {
     container 'quay.io/biocontainers/bowtie2:2.4.1--py38he513fc3_0'
 
     label 'med_cpu_mem'
 
     input:
-        file('seqs.fastq.gz') from preprocessed
+        file('seqs.fastq.gz') from for_consensus_mapping
         file('') from consensus_build
 
     output:
@@ -254,7 +252,7 @@ process consensus_sam_to_bam {
         file('sorted.bam') into remap_sorted
 
     """
-    samtools view --threads ${task.cpus} -o alignment.bam -b alignment.sam
+    samtools view --threads ${task.cpus} -b alignment.sam -o alignment.bam
     samtools sort --threads ${task.cpus} -o sorted.bam alignment.bam
     """
 }
