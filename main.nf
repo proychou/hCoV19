@@ -1,7 +1,9 @@
-seqs = file('test/UWVL20030401-A01-VIRv1_S1_R1_001.fastq.gz')
+// TODO: Channel of fastq, tuple [sample name, fastq]
+seqs = file('test/UWVL20030405-E01-VIRv1_S5_R1_001.fastq.gz')
 reference_fa = file('refs/NC_045512.fasta')
 genbank = file('refs/NC_045512.gb')
 
+// TODO: make separate pipeline for reference creation, store in s3
 process bowtie_index {
     container 'quay.io/biocontainers/bowtie2:2.4.1--py38he513fc3_0'
 
@@ -14,7 +16,7 @@ process bowtie_index {
         file('*.bt2') into bowtie_ref
 
     """
-    bowtie2-build reference.fasta reference
+    bowtie2-build --threads ${task.cpus} reference.fasta reference
     """
 }
 
@@ -51,10 +53,11 @@ process prokka_index {
 }
 
 // FastQC report on raw reads
+// TODO: do fastqc on whole channel
 process fastqc_raw_report  {
     container 'quay.io/biocontainers/fastqc:0.11.9--0'
 
-    label 'med_cpu_mem'
+    label 'fastqc_mem'
 
     input:
         file('seqs.fastq.gz') from seqs
@@ -66,12 +69,12 @@ process fastqc_raw_report  {
 
     """
     mkdir fastqc_reports_raw
-    fastqc --outdir fastqc_reports_raw --threads 8 seqs.fastq.gz
+    fastqc --outdir fastqc_reports_raw --threads ${task.cpus} seqs.fastq.gz
     """
 }
 
 // Adapter trimming with bbduk
-process right_trim {
+process preprocess {
     container 'quay.io/biocontainers/bbmap:38.79--h516909a_0'
 
     label 'med_cpu_mem'
@@ -80,48 +83,16 @@ process right_trim {
         file('seqs.fastq.gz') from seqs
 
     output:
-        file('right_trimmed.fastq.gz') into right_trimmed
-
-    """
-    bbduk.sh in=seqs.fastq.gz out=right_trimmed.fastq.gz hdist=2 k=21 ktrim=r mink=4 ref=adapters,artifacts
-    """
-}
-
-process left_trim {
-    container 'quay.io/biocontainers/bbmap:38.79--h516909a_0'
-
-    label 'med_cpu_mem'
-
-    input:
-        file('seqs.fastq.gz') from right_trimmed
-
-    output:
-        file('left_trimmed.fastq.gz') into trimmed
-
-    """
-    bbduk.sh in=seqs.fastq.gz out=left_trimmed.fastq.gz hdist=2 k=21 ktrim=l mink=4 ref=adapters,artifacts
-    """
-}
-
-// Quality trimming
-process quality_trim {
-    container 'quay.io/biocontainers/bbmap:38.79--h516909a_0'
-
-    label 'med_cpu_mem'
-
-    input:
-        file('seqs.fastq.gz') from trimmed
-
-    output:
         file('preprocessed.fastq.gz') into preprocessed
 
     """
-    bbduk.sh in=seqs.fastq.gz out=preprocessed.fastq.gz maq=10 minlen=20 qtrim=rl trimq=20
+    bbduk.sh in=seqs.fastq.gz out=right_trimmed.fastq.gz hdist=2 k=21 ktrim=r mink=4 ref=adapters,artifacts threads=${task.cpus}
+    bbduk.sh in=right_trimmed.fastq.gz out=trimmed.fastq.gz hdist=2 k=21 ktrim=l mink=4 ref=adapters,artifacts threads=${task.cpus}
+    bbduk.sh in=trimmed.fastq.gz out=preprocessed.fastq.gz maq=10 minlen=20 qtrim=rl trimq=20 threads=${task.cpus}
     """
 }
 
 // Map reads to reference
-// TODO: find out of bowtie2 can write directly to sorted bam file
 process map_to_ref {
     container 'quay.io/biocontainers/bowtie2:2.4.1--py38he513fc3_0'
 
@@ -135,7 +106,7 @@ process map_to_ref {
         file('alignment.sam') into sam
 
     """
-    bowtie2 --threads 8 -x reference -U seqs.fastq.gz -S alignment.sam
+    bowtie2 --threads ${task.cpus} -x reference -U seqs.fastq.gz -S alignment.sam
     """
 }
 
@@ -148,26 +119,11 @@ process sam_to_bam {
         file('alignment.sam') from sam
 
     output:
-        file('alignment.bam') into bam
-
-    """
-    samtools view -o alignment.bam -b alignment.sam
-    """
-}
-
-process sort_bam {
-    container 'quay.io/biocontainers/samtools:1.10--h9402c20_2'
-
-    label 'med_cpu_mem'
-
-    input:
-        file('alignment.bam') from bam
-
-    output:
         file('sorted.bam') into sorted
 
     """
-    samtools sort -o sorted.bam --threads 8 alignment.bam
+    samtools view --threads ${task.cpus} -o alignment.bam -b alignment.sam
+    samtools sort --threads ${task.cpus} -o sorted.bam alignment.bam
     """
 }
 
@@ -187,7 +143,7 @@ process filter {
         file('stats_filtering.txt')
 
     """
-    bbduk.sh in=seqs.fastq.gz out=unmatched.fastq.gz outm=matched.fastq.gz ref=reference.fasta hdist=2 k=31 stats=stats_filtering.txt
+    bbduk.sh in=seqs.fastq.gz out=unmatched.fastq.gz outm=matched.fastq.gz ref=reference.fasta hdist=2 k=31 stats=stats_filtering.txt --threads=${task.cpus}
     """
 }
 
@@ -195,7 +151,7 @@ process filter {
 process fastqc_processed_report  {
     container 'quay.io/biocontainers/fastqc:0.11.9--0'
 
-    label 'med_cpu_mem'
+    label 'fastqc_mem'
 
     input:
         file('seqs.fastq.gz') from filtered
@@ -207,7 +163,7 @@ process fastqc_processed_report  {
 
     """
     mkdir fastqc_reports_preprocessed
-    fastqc --outdir fastqc_reports_preprocessed --threads 8 seqs.fastq.gz
+    fastqc --outdir fastqc_reports_preprocessed --threads ${task.cpus} seqs.fastq.gz
     """
 }
 
@@ -218,8 +174,6 @@ process assemble {
 
     label 'med_cpu_mem'
 
-    memory '8.GB' // 8.GB = 64 Gb
-
     input:
         file('seqs.fastq.gz') from filtered
 
@@ -229,13 +183,14 @@ process assemble {
 
     """
     mkdir contigs
-    spades.py --careful --memory 64 --threads 8 -s seqs.fastq.gz -o contigs
+    spades.py --careful --memory ${task.memory.toGiga() * 8} --threads ${task.cpus} -s seqs.fastq.gz -o contigs
     """
 }
 
 // First import scaffolds and filter by length (>200) and coverage (>10x)
+// TODO: This file is a mini pipeline. Break out pieces into nf processes, bwa and samtools
+// TODO: Make coverage a parameter
 process merge {
-    // TODO: This file is a mini pipeline. Break out pieces into nf processes
     container 'hcov19-r-deps:latest'
 
     label 'med_cpu_mem'
@@ -249,7 +204,7 @@ process merge {
         file('ref_for_remapping/*') into consensus
 
     """
-    hcov_make_seq.R sampname=\\"sample\\"  reffname=\\"reference.fasta\\" scaffname=\\"scaffolds.fasta\\" ncores=\"8\"
+    hcov_make_seq.R sampname=\\"sample\\"  reffname=\\"reference.fasta\\" scaffname=\\"scaffolds.fasta\\" ncores=\"${task.cpus}\"
     """
 }
 
@@ -265,10 +220,11 @@ process bowtie_consensus_build {
         file('*.bt2') into consensus_build
 
     """
-    bowtie2-build -q consensus.fasta reference
+    bowtie2-build --threads ${task.cpus} consensus.fasta reference
     """
 }
 
+// TODO: Check to use preprocessed, filtered or raw reads here
 process map_to_consensus {
     container 'quay.io/biocontainers/bowtie2:2.4.1--py38he513fc3_0'
 
@@ -282,7 +238,7 @@ process map_to_consensus {
         file('alignment.sam') into remap_sam
 
     """
-    bowtie2 --threads 8 -x reference -U seqs.fastq.gz -S alignment.sam
+    bowtie2 --threads ${task.cpus} -x reference -U seqs.fastq.gz -S alignment.sam
     """
 }
 
@@ -295,29 +251,15 @@ process consensus_sam_to_bam {
         file('alignment.sam') from remap_sam
 
     output:
-        file('alignment.bam') into remap_bam
+        file('sorted.bam') into remap_sorted
 
     """
-    samtools view -o alignment.bam -b alignment.sam
-    """
-}
-
-process sort_consensus_bam {
-    container 'quay.io/biocontainers/samtools:1.10--h9402c20_2'
-
-    label 'med_cpu_mem'
-
-    input:
-        file('alignment.bam') from remap_bam
-
-    output:
-        file('remapped_sorted.bam') into remap_sorted
-
-    """
-    samtools sort -o remapped_sorted.bam --threads 8 alignment.bam
+    samtools view --threads ${task.cpus} -o alignment.bam -b alignment.sam
+    samtools sort --threads ${task.cpus} -o sorted.bam alignment.bam
     """
 }
 
+// TODO: paste imported R function directly into this file
 process final_seq {
     container 'hcov19-r-deps:latest'
 
@@ -335,6 +277,7 @@ process final_seq {
     """
 }
 
+// TODO: check if prokka needs contigs to be >20 chars long
 process prokka_annnotations {
     container 'quay.io/biocontainers/prokka:1.14.6--pl526_0'
 
@@ -350,6 +293,8 @@ process prokka_annnotations {
         file('*')
 
     """
-    prokka --kingdom 'Viruses' --genus 'Betacoronavirus' --usegenus --prefix annotations --proteins proteins.faa sample.fa
+    prokka --cpus ${task.cpus} --kingdom 'Viruses' --genus 'Betacoronavirus' --usegenus --prefix annotations --proteins proteins.faa sample.fa
     """
 }
+
+// TODO: add ncbi genbank submissions manifest
