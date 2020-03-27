@@ -3,9 +3,6 @@
 ## Pavitra Roychoudhury
 ## Adapted from hsv_generate_consensus.R on 6-Mar-19
 
-## Built to be called from hhv6_wgs_pipeline.sh with input arguments specifying input filename
-## Requires wgs_functions.R which contains several utility scripts plus multiple R packages listed below
-
 library(Rsamtools);
 library(GenomicAlignments);
 library(ShortRead);
@@ -78,68 +75,48 @@ generate_consensus<-function(bamfname){
   }
 }
 
-
-clean_consensus_hcov<-function(sampname,remapped_bamfname,mappedtoref_bamfname,ref){
-  require(Rsamtools);
-  require(GenomicAlignments);
-  require(Biostrings);
-  mapping_stats<-data.frame(ref=ref,
-                            remapped_bam=remapped_bamfname,
-                            mappedtoref_bam=mappedtoref_bamfname,
-                            mapped_reads_ref=0,mapped_reads_assemblyref=0,perc_Ns=0,num_Ns=0,width=0,
-                            stringsAsFactors=F);
-
-  #Import mapped reads + assembly and generate consensus
-  con_seq<-generate_consensus(mapping_stats$remapped_bam);
-  if(!dir.exists('./consensus_seqs')) dir.create('./consensus_seqs');
-  writeXStringSet(con_seq,file=paste('./consensus_seqs/',sampname,'.fasta',sep=''),format='fasta');
-
-  #Compute #mapped reads and %Ns
-  mapping_stats$mapped_reads_ref<-unlist(lapply(mapping_stats$mappedtoref_bam,n_mapped_reads));
-  mapping_stats$mapped_reads_assemblyref<-unlist(lapply(mapping_stats$remapped_bam,n_mapped_reads));
-  mapping_stats$num_Ns<-sum(letterFrequency(con_seq,c('N','+')));
-  mapping_stats$width<-width(con_seq);
-  mapping_stats$perc_Ns<-100*mapping_stats$num_Ns/mapping_stats$width;
-  if(!dir.exists('./stats/')) dir.create('./stats/');
-  write.csv(mapping_stats,file=paste('./stats/',sampname,'_mappingstats.csv',sep=''),row.names=F);
-
-  return(TRUE)
-}
-
-##Get args from command line
-args<-(commandArgs(TRUE));
-if(length(args)==0){
-  print("No arguments supplied.")
-}else{
-  for(i in 1:length(args)){
-    eval(parse(text=args[[i]]))
-    print(args[[i]])
+#Return the number of mapped reads in a bam file
+n_mapped_reads<-function(bamfname){
+  require(Rsamtools)
+  indexBam(bamfname)
+  if(file.exists(bamfname)&class(try(scanBamHeader(bamfname),silent=T))!='try-error'){
+    return(idxstatsBam(bamfname)$mapped)
+  }else{
+    return(NA)
   }
 }
 
-##For testing (these args should come from command line)
-## sampname='2016-01040_S451_L001'
-## ref='NC_016842'
-## remapped_bamfname
+args <- commandArgs(TRUE)
 
-##Files, directories, target site
-mapped_reads_folder<-'./mapped_reads/';
+## consensus is generated from remapped_bam
+remapped_bam <- args[1]
 
-##Make consensus sequence--returns TRUE if this worked
-conseq<-clean_consensus_hcov(sampname,remapped_bamfname,mappedtoref_bamfname,ref);
+## stats are calculated from mappedtoref_bam
+mappedtoref_bam <- args[2]
+refname <- args[3]
 
-##Prepare seqs for annotation -- will make separate folders for A and B
-if(conseq==TRUE){
-  if(!dir.exists('./annotations_prokka')) dir.create('./annotations_prokka');
+## outputs
+final_cons <- args[4]
+stats_csv <- args[5]
 
-  ##Write consensus seq to folder for prokka
-  fname<-paste('./consensus_seqs/',sampname,'.fasta',sep='')
-  con_seq<-readDNAStringSet(fname);
-  names(con_seq)<-substring(names(con_seq),1,20); ##prokka needs contig name to be <=20 chars long
-  sampdir<-paste('./annotations_prokka/',sampname,sep='');
-  if(!dir.exists(sampdir)) dir.create(sampdir); ##create folder for the sample
-  writeXStringSet(con_seq,file=paste(sampdir,'/',sampname,'.fa',sep=''),format='fasta');
+con_seq <- generate_consensus(remapped_bam)
+writeXStringSet(con_seq, file=final_cons, format='fasta')
 
-}else{
-  print('Failed to generate consensus sequences.')
-}
+num_Ns <- sum(letterFrequency(con_seq,c('N','+')))
+width <- width(con_seq)
+
+mapping_stats <- data.frame(
+    ref=refname,
+    remapped_bam=NA,
+    mappedtoref_bam=NA,
+    mapped_reads_ref=unlist(lapply(mappedtoref_bam, n_mapped_reads)),
+    mapped_reads_assemblyref=unlist(lapply(remapped_bam, n_mapped_reads)),
+    perc_Ns=100 * num_Ns / width,
+    num_Ns=num_Ns,
+    width=width,
+    stringsAsFactors=FALSE
+)
+
+write.csv(mapping_stats, file=stats_csv, row.names=FALSE)
+
+

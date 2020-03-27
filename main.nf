@@ -301,29 +301,36 @@ process consensus_sam_to_bam {
         file('alignment.sam') from remap_sam
 
     output:
-        file('sorted.bam') into remap_sorted
+        file('remap_sorted.bam') into remap_sorted
 
     """
     samtools view --threads ${task.cpus} -b alignment.sam -o alignment.bam
-    samtools sort --threads ${task.cpus} -o sorted.bam alignment.bam
+    samtools sort --threads ${task.cpus} -o remap_sorted.bam alignment.bam
     """
 }
 
-// TODO: paste imported R function directly into this file
-process final_seq {
+
+process final_consensus {
+    // TODO: use public bioconductor image
     container 'hcov19-r-deps:latest'
 
     label 'med_cpu_mem'
 
     input:
-        file('remapped.bam') from remap_sorted
-        file('mapped.bam') from sorted
+        file(remapped_bam) from remap_sorted
+        file(mapped_bam) from sorted
 
     output:
-        file('annotations_prokka/sample/sample.fa') into final_cons
+        file('final_consensus.fasta') into final_cons
+        file('mapping_stats.csv') into mapping_stats
+
+    publishDir params.output, overwrite: true
+
+    // TODO: inject sample name
 
     """
-    hcov_generate_consensus.R sampname=\\"sample\\" ref=\\"reference\\" remapped_bamfname=\\"remapped.bam\\" mappedtoref_bamfname=\\"mapped.bam\\"
+    hcov_generate_consensus.R ${remapped_bam} ${mapped_bam} ${reference_fa} \
+        final_consensus.fasta mapping_stats.csv
     """
 }
 
