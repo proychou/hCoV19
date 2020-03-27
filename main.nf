@@ -9,13 +9,13 @@ process bowtie_index {
     label "med_cpu_mem"
 
     input:
-        file("reference.fasta") from reference_fa
+        file(ref) from reference_fa
 
     output:
-        file("*.bt2") into bowtie_ref
+        file('*.bt2') into bowtie_ref
 
     """
-    bowtie2-build --threads ${task.cpus} reference.fasta reference
+    bowtie2-build --threads ${task.cpus} ${ref} reference
     """
 }
 
@@ -25,13 +25,13 @@ process bwa_index {
     label "med_cpu_mem"
 
     input:
-        file("reference.fasta") from reference_fa
+        file(ref) from reference_fa
 
     output:
-        file("reference.*") into bwa_ref
+        file('*') into bwa_ref
 
     """
-    bwa index reference.fasta
+    bwa index ${ref}
     """
 }
 
@@ -80,7 +80,8 @@ process trimming {
         tuple(val(sample), file(fastq)) from samples.map{ [ it["sample"], file(it["fastq"]) ] }
 
     output:
-        tuple(val(sample), file("trimmed.fastq.gz")) into (preprocessed, for_reference_mapping, for_consensus_mapping)
+        tuple(val(sample), file("trimmed.fastq.gz")) into (preprocessed, for_reference_mapping)
+        file("trimmed.fastq.gz") into for_consensus_mapping
 
     // bbduk --help: When piping interleaving must be explicitly stated: int=f unpaired, int=t for paired
     """
@@ -97,14 +98,14 @@ process map_to_ref {
     label "med_cpu_mem"
 
     input:
-        tuple(val(sample), file("seqs.fastq.gz")) from for_reference_mapping
-        file(ref) from bowtie_ref
+        tuple(val(sample), file(fastq)) from for_reference_mapping
+        file('') from bowtie_ref
 
     output:
         tuple(val(sample), file("alignment.sam")) into sam
 
     """
-    bowtie2 --threads ${task.cpus} -x ${ref[0].simpleName} -U seqs.fastq.gz -S alignment.sam
+    bowtie2 --threads ${task.cpus} -x reference -U ${fastq} -S alignment.sam
     """
 }
 
@@ -167,7 +168,7 @@ process fastqc_processed_report  {
     """
 }
 
-// Assemble with SPAdesa
+// Assemble with SPAdes
 // FIXME: fix error here with some samples..
 process assemble {
     container "quay.io/biocontainers/spades:3.14.0--h2d02072_0"
@@ -178,31 +179,83 @@ process assemble {
         tuple(val(sample), file(fastq)) from filtered
 
     output:
-        tuple(val(sample), file("scaffolds.fasta")) into scaffolds
+        file("scaffolds.fasta") into scaffolds
 
     """
     spades.py --careful --memory ${task.memory.toGiga() * 8} --threads ${task.cpus} -s ${fastq} -o .
     """
 }
 
-// First import scaffolds and filter by length (>200) and coverage (>10x)
-// TODO: This file is a mini pipeline. Break out pieces into nf processes, bwa and samtools
-// TODO: Make coverage a parameter
-process merge {
-    container "hcov19-r-deps:latest"
-
-    label "med_cpu_mem"
+// lifted scaffold filtering out of hcov_make_seq.R
+process filter_scaffolds {
+    // TODO: use public bioconductor docker image?
+    container 'hcov19-r-deps:latest'
 
     input:
-        tuple(val(sample), file("scaffolds.fasta")) from scaffolds
-        file("reference.fasta") from reference_fa
-        file("") from bwa_ref
+        file(scaffolds) from scaffolds
 
     output:
-        tuple(val(sample), file("ref_for_remapping/*.fasta")) into consensus
+        file('filtered_scaffolds.fasta') into filtered_scaffolds
+
+    //TODO: min_len and min_cov as params?
 
     """
-    hcov_make_seq.R sampname=\\"${sample}\\"  reffname=\\"reference.fasta\\" scaffname=\\"scaffolds.fasta\\" ncores=\"${task.cpus}\"
+    filter_scaffolds.R ${scaffolds} filtered_scaffolds.fasta 200 5
+    """
+}
+
+// lifted scaffold alignment out of hcov_make_seq.R
+process align_contigs {
+    // TODO: consolidate this and next step in container with bwa and samtools
+
+    container 'quay.io/biocontainers/bwa:0.7.17--hed695b0_7'
+
+    input:
+        file(scaffold) from filtered_scaffolds
+        file(ref_fa) from reference_fa
+        file('') from bwa_ref
+
+    output:
+        file('filtered_scaffolds.sam') into aligned_contigs
+
+    """
+    bwa mem ${ref_fa} ${scaffold} > filtered_scaffolds.sam
+    """
+}
+
+process scaffold_sam_to_bam {
+
+    container 'quay.io/biocontainers/samtools:1.10--h9402c20_2'
+
+    input:
+        file(contig_sam) from aligned_contigs
+        file(ref_fa) from reference_fa
+
+    output:
+        file('filtered_scaffolds_sorted.bam') into filtered_scaffold_bam
+
+    """
+    samtools view -bh -@ ${task.cpus} -o filtered_scaffolds.bam \
+       ${contig_sam} -T ${ref_fa}
+    samtools sort -@ ${task.cpus} -o filtered_scaffolds_sorted.bam \
+       filtered_scaffolds.bam
+    """
+}
+
+process make_ref_from_assembly {
+
+    // TODO: use public bioconductor docker image?
+    container 'hcov19-r-deps:latest'
+
+    input:
+        file(bam) from filtered_scaffold_bam
+        file(ref_fa) from reference_fa
+
+    output:
+        file('scaffold_consensus.fasta') into consensus
+
+    """
+    make_ref_from_assembly.R ${bam} ${ref_fa} scaffold_consensus.fasta
     """
 }
 
@@ -212,7 +265,7 @@ process bowtie_consensus_build {
     label "med_cpu_mem"
 
     input:
-        tuple(val(sample), file("consensus.fasta")) from consensus
+        file("consensus.fasta") from consensus
 
     output:
         file("*.bt2") into consensus_build
@@ -228,11 +281,11 @@ process map_to_consensus {
     label "med_cpu_mem"
 
     input:
-        tuple(val(sample), file(fastq)) from for_consensus_mapping
+        file(fastq) from for_consensus_mapping
         file("") from consensus_build
 
     output:
-        tuple(val(sample), file("alignment.sam")) into remap_sam
+        file("alignment.sam") into remap_sam
 
     """
     bowtie2 --threads ${task.cpus} -x reference -U ${fastq} -S alignment.sam
@@ -245,32 +298,39 @@ process consensus_sam_to_bam {
     label "med_cpu_mem"
 
     input:
-        tuple(val(sample), file("alignment.sam")) from remap_sam
+        file("alignment.sam") from remap_sam
 
     output:
-        tuple(val(sample), file("sorted.bam")) into remap_sorted
+        file("remap_sorted.bam") into remap_sorted
 
     """
     samtools view --threads ${task.cpus} -b alignment.sam |
-    samtools sort --threads ${task.cpus} -o sorted.bam
+    samtools sort --threads ${task.cpus} -o remap_sorted.bam
     """
 }
 
-// TODO: paste imported R function directly into this file
-process final_seq {
-    container "hcov19-r-deps:latest"
+process final_consensus {
+    // TODO: use public bioconductor image
+    container 'hcov19-r-deps:latest'
 
     label "med_cpu_mem"
 
     input:
-        tuple(val(sample), file("remapped.bam")) from remap_sorted
-        tuple(val(sample), file("mapped.bam")) from sorted
+        file(remapped_bam) from remap_sorted
+        tuple(val(sample), file(mapped_bam)) from sorted
 
     output:
-        tuple(val(sample), file("annotations_prokka/${sample}/${sample}.fa")) into final_cons
+        tuple(val(sample), file('final_consensus.fasta')) into final_cons
+        file('mapping_stats.csv') into mapping_stats
+
+    publishDir params.output, overwrite: true
+
+    // TODO: inject sample name -- see val(sample) ^^
+    // FIXME: final_cons seqname must be sample name for prokka genbank LOCUS
 
     """
-    hcov_generate_consensus.R sampname=\\"${sample}\\" ref=\\"reference\\" remapped_bamfname=\\"remapped.bam\\" mappedtoref_bamfname=\\"mapped.bam\\"
+    hcov_generate_consensus.R ${remapped_bam} ${mapped_bam} ${reference_fa} \
+        final_consensus.fasta mapping_stats.csv
     """
 }
 
