@@ -5,10 +5,15 @@ require(Rsamtools)
 require(GenomicAlignments)
 require(parallel)
 
-## Make a new reference from scaffolds
-## Pavitra Roychoudhury
-## from https://github.com/proychou/ViralWGS/blob/master/wgs_functions.R
-make_ref_from_assembly<-function(bamfname, reffname){
+make_ref_from_assembly<-function(bamfname, reffname, outfname){
+  ## Make a new reference from scaffolds
+  ## Pavitra Roychoudhury
+  ## from https://github.com/proychou/ViralWGS/blob/master/wgs_functions.R
+
+  ## bamfname - filename for bam of filtered scaffolds
+  ## reffname - filename for reference fasta
+  ## outfname - filename for output fasta
+
   ncores<-detectCores();
 
   ## Read reference sequence
@@ -105,11 +110,8 @@ make_ref_from_assembly<-function(bamfname, reffname){
     }else{
       con_seq_final<-con_seq;
     }
-    names(con_seq_final)<-sub('.bam','_consensus',basename(bamfname));
 
-    if(!dir.exists('./ref_for_remapping')) dir.create('./ref_for_remapping');
-    writeXStringSet(con_seq_final,
-                    paste0('./ref_for_remapping/',names(con_seq_final),'.fasta'));
+    writeXStringSet(con_seq_final, outfname);
 
     ## Delete bai file
     file.remove(baifname);
@@ -122,3 +124,4 @@ make_ref_from_assembly<-function(bamfname, reffname){
 
 ## keep command line argument parsing simple for now - argparse would be better
 args <- commandArgs(TRUE)
+make_ref_from_assembly(bamfname=args[1], reffname=args[2], outfname=args[3])
