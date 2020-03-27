@@ -121,7 +121,7 @@ process sam_to_bam {
     output:
         tuple(val(sample), file("sorted.bam")) into sorted
 
-    // samtools --help: -m INT Set maximum memory per thread; suffix K/M/G recognized [768M]
+    // TODO: samtools sort --help: -m INT Set maximum memory per thread; suffix K/M/G recognized [768M]
     """
     samtools view --threads ${task.cpus} -b alignment.sam |
     samtools sort --threads ${task.cpus} -o sorted.bam
@@ -236,7 +236,7 @@ process scaffold_sam_to_bam {
     output:
         file('filtered_scaffolds_sorted.bam') into filtered_scaffold_bam
 
-    // samtools --help: -m INT Set maximum memory per thread; suffix K/M/G recognized [768M]
+    // TODO: samtools sort --help: -m INT Set maximum memory per thread; suffix K/M/G recognized [768M]
     """
     samtools view -bh -@ ${task.cpus} -o filtered_scaffolds.bam \
        ${contig_sam} -T ${ref_fa}
@@ -304,7 +304,7 @@ process consensus_sam_to_bam {
     output:
         file("remap_sorted.bam") into remap_sorted
 
-    // samtools --help: -m INT Set maximum memory per thread; suffix K/M/G recognized [768M]
+    // TODO: samtools sort --help: -m INT Set maximum memory per thread; suffix K/M/G recognized [768M]
     """
     samtools view --threads ${task.cpus} -b alignment.sam |
     samtools sort --threads ${task.cpus} -o remap_sorted.bam
