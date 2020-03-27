@@ -1,3 +1,4 @@
+// Author: Pavitra Roychoudhury
 Channel.fromPath("test/manifest.csv").splitCsv(header:true).into{samples; for_prereporting}
 reference_fa = file("refs/NC_045512.fasta")
 reference_gb = file("refs/NC_045512.gb")
@@ -245,9 +246,7 @@ process scaffold_sam_to_bam {
 }
 
 process make_ref_from_assembly {
-
-    // TODO: use public bioconductor docker image?
-    container 'hcov19-r-deps:latest'
+    container 'bioconductor/release_core2:R3.6.2_Bioc3.10'
 
     input:
         file(bam) from filtered_scaffold_bam
@@ -313,8 +312,7 @@ process consensus_sam_to_bam {
 }
 
 process final_consensus {
-    // TODO: use public bioconductor image
-    container 'hcov19-r-deps:latest'
+    container 'bioconductor/release_core2:R3.6.2_Bioc3.10'
 
     label "med_cpu_mem"
 
