@@ -51,7 +51,7 @@ process prokka_index {
 process fastqc_prereport  {
     container "quay.io/biocontainers/fastqc:0.11.9--0"
     label "fastqc_mem"
-    publishDir params.output + "/fastqc_reports_raw/", overwrite: true
+    publishDir "${params.output}/fastqc/raw/", overwrite: true
 
     input:
         file(fastqs) from for_prereporting.collect{ file(it["fastq"]) }
@@ -71,7 +71,7 @@ process trimming {
     input:
         tuple(val(sample), file(fastq)) from samples.map{ [ it["sample"], file(it["fastq"]) ] }
     output:
-        tuple(val(sample), file("trimmed.fastq.gz")) into (preprocessed, for_reference_mapping)
+        tuple(val(sample), file("trimmed.fastq.gz")) into (trimmed, for_reference_mapping)
         file("trimmed.fastq.gz") into for_consensus_mapping
 
     // bbduk --help: When piping interleaving must be explicitly stated: int=f unpaired, int=t for paired
@@ -119,19 +119,18 @@ process sam_to_bam {
 process filter {
     container "quay.io/biocontainers/bbmap:38.79--h516909a_0"
     label "med_cpu_mem"
-    publishDir params.output + "/filtered_fastq/", overwrite: true
+    publishDir "${params.output}/${sample}/", overwrite: true
 
     input:
-        tuple(val(sample), file(fastq)) from preprocessed
+        tuple(val(sample), file(fastq)) from trimmed
         file(ref) from reference_fa
     output:
-        tuple(val(sample), file("${sample}_matched.fastq.gz")) into filtered
-        file("${sample}_matched.fastq.gz") into for_filtered_reporting
-        file("${sample}_unmatched.fastq.gz")
-        file("${sample}_stats_filtering.txt")
+        tuple(val(sample), file("matched.fastq.gz")) into (preprocessed, for_preprocessed_reporting)
+        file("unmatched.fastq.gz")
+        file("stats_filtering.txt")
 
     """
-    bbduk.sh in=${fastq} out=${sample}_unmatched.fastq.gz outm=${sample}_matched.fastq.gz ref=${ref} hdist=2 k=31 stats=${sample}_stats_filtering.txt --threads=${task.cpus}
+    bbduk.sh in=${fastq} out=unmatched.fastq.gz outm=matched.fastq.gz ref=${ref} hdist=2 k=31 stats=stats_filtering.txt --threads=${task.cpus}
     """
 }
 
@@ -139,10 +138,10 @@ process filter {
 process fastqc_processed_report  {
     container "quay.io/biocontainers/fastqc:0.11.9--0"
     label "fastqc_mem"
-    publishDir params.output + "/fastqc_reports_preprocessed/", overwrite: true
+    publishDir "${params.output}/fastqc/preprocessed/", overwrite: true
 
     input:
-        file(fastqs) from for_filtered_reporting.collect()
+        file(fastqs) from for_preprocessed_reporting.collect{ file(it[0] + ".fastq.gz") }
     output:
        file("*")
 
@@ -154,13 +153,12 @@ process fastqc_processed_report  {
 // Assemble with SPAdes
 // FIXME: fix error here with some samples..
 // TODO: check out other assembly options, ABySS, etc
-// TODO: Check out error strategy, use Ignore
 process assemble {
     container "quay.io/biocontainers/spades:3.14.0--h2d02072_0"
     label "med_cpu_mem"
 
     input:
-        tuple(val(sample), file(fastq)) from filtered
+        tuple(val(sample), file(fastq)) from preprocessed
     output:
         file("scaffolds.fasta") into scaffolds
 
@@ -172,7 +170,7 @@ process assemble {
 // lifted scaffold filtering out of hcov_make_seq.R
 process filter_scaffolds {
     // TODO: use public bioconductor docker image?
-    container 'hcov19-r-deps:latest'
+    container 'bioconductor/release_core2:R3.6.2_Bioc3.10'
 
     input:
         file(scaffolds) from scaffolds
@@ -182,7 +180,7 @@ process filter_scaffolds {
     //TODO: min_len and min_cov as params?
 
     """
-    filter_scaffolds.R ${scaffolds} filtered_scaffolds.fasta 200 5
+    filter_scaffolds.R ${scaffolds} filtered_scaffolds.fasta 200 0
     """
 }
 
@@ -205,7 +203,6 @@ process align_contigs {
 }
 
 process scaffold_sam_to_bam {
-
     container 'quay.io/biocontainers/samtools:1.10--h9402c20_2'
 
     input:
@@ -287,7 +284,7 @@ process consensus_sam_to_bam {
 process final_consensus {
     container 'bioconductor/release_core2:R3.6.2_Bioc3.10'
     label "med_cpu_mem"
-    publishDir params.output, overwrite: true
+    publishDir "${params.output}/${sample}/", overwrite: true
 
     input:
         file(remapped_bam) from remap_sorted
@@ -308,7 +305,7 @@ process final_consensus {
 process prokka_annnotations {
     container "quay.io/biocontainers/prokka:1.14.6--pl526_0"
     label "med_cpu_mem"
-    publishDir params.output, overwrite: true
+    publishDir "${params.output}/${sample}/", overwrite: true
 
     input:
         tuple(val(sample), file(fasta)) from final_cons
@@ -317,7 +314,7 @@ process prokka_annnotations {
         file("*")
 
     """
-    prokka --cpus ${task.cpus} --kingdom "Viruses" --genus "Betacoronavirus" --usegenus --prefix ${sample} --proteins ${ref} ${fasta}
+    prokka --cpus ${task.cpus} --kingdom "Viruses" --genus "Betacoronavirus" --usegenus --outdir genbank --prefix ${sample} --proteins ${ref} ${fasta}
     """
 }
 
