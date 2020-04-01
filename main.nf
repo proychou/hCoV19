@@ -51,7 +51,7 @@ process prokka_index {
 process fastqc_prereport  {
     container "quay.io/biocontainers/fastqc:0.11.9--0"
     label "fastqc_mem"
-    publishDir "${params.output}/fastqc/raw/", overwrite: true
+    publishDir "${params.output}/fastqc/raw/", mode: "copy", overwrite: true
 
     input:
         file(fastqs) from for_prereporting.collect{ file(it["fastq"]) }
@@ -119,7 +119,7 @@ process sam_to_bam {
 process filter {
     container "quay.io/biocontainers/bbmap:38.79--h516909a_0"
     label "med_cpu_mem"
-    publishDir "${params.output}/${sample}/", overwrite: true
+    publishDir "${params.output}/${sample}/", mode: "copy", overwrite: true
 
     input:
         tuple(val(sample), file(fastq)) from trimmed
@@ -138,10 +138,10 @@ process filter {
 process fastqc_processed_report  {
     container "quay.io/biocontainers/fastqc:0.11.9--0"
     label "fastqc_mem"
-    publishDir "${params.output}/fastqc/preprocessed/", overwrite: true
+    publishDir "${params.output}/fastqc/preprocessed/", mode: "copy", overwrite: true
 
     input:
-        file(fastqs) from for_preprocessed_reporting.collect{ file(it[0] + ".fastq.gz") }
+        file(fastqs) from for_preprocessed_reporting.collect{ file(it[1]) }
     output:
        file("*")
 
@@ -284,7 +284,7 @@ process consensus_sam_to_bam {
 process final_consensus {
     container 'bioconductor/release_core2:R3.6.2_Bioc3.10'
     label "med_cpu_mem"
-    publishDir "${params.output}/${sample}/", overwrite: true
+    publishDir "${params.output}/${sample}/", mode: "copy", overwrite: true
 
     input:
         file(remapped_bam) from remap_sorted
@@ -305,7 +305,7 @@ process final_consensus {
 process prokka_annnotations {
     container "quay.io/biocontainers/prokka:1.14.6--pl526_0"
     label "med_cpu_mem"
-    publishDir "${params.output}/${sample}/", overwrite: true
+    publishDir "${params.output}/${sample}/", mode:"copy", overwrite: true
 
     input:
         tuple(val(sample), file(fasta)) from final_cons
