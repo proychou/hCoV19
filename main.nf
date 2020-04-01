@@ -2,6 +2,7 @@
 Channel.fromPath("test/manifest.csv").splitCsv(header:true).into{samples; for_prereporting}
 reference_fa = file("refs/NC_045512.fasta")
 reference_gb = file("refs/NC_045512.gb")
+sra_template = file("Pathogen.cl.1.0.tsv")
 
 // TODO: make separate pipeline for reference creation, store in s3
 process bowtie_index {
@@ -107,10 +108,9 @@ process sam_to_bam {
     output:
         tuple(val(sample), file("sorted.bam")) into sorted
 
-    // TODO: samtools sort --help: -m INT Set maximum memory per thread; suffix K/M/G recognized [768M]
     """
     samtools view --threads ${task.cpus} -b alignment.sam |
-    samtools sort --threads ${task.cpus} -o sorted.bam
+    samtools sort -m ${(task.memory.toMega()/task.cpus).intValue()}M --threads ${task.cpus} -o sorted.bam
     """
 }
 
@@ -274,10 +274,9 @@ process consensus_sam_to_bam {
     output:
         file("remap_sorted.bam") into remap_sorted
 
-    // TODO: samtools sort --help: -m INT Set maximum memory per thread; suffix K/M/G recognized [768M]
     """
     samtools view --threads ${task.cpus} -b alignment.sam |
-    samtools sort --threads ${task.cpus} -o remap_sorted.bam
+    samtools sort -m ${(task.memory.toMega()/task.cpus).intValue()}M --threads ${task.cpus} -o remap_sorted.bam
     """
 }
 
@@ -326,6 +325,7 @@ process sra_submission {
 
     input:
         val(samples) from submit.collect()
+        file(template) from sra_template
     output:
         file("*")
 
