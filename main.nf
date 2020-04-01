@@ -311,7 +311,7 @@ process prokka_annnotations {
         tuple(val(sample), file(fasta)) from final_cons
         file(ref) from prokka_ref
     output:
-        file("*")
+        val(sample) into submit
 
     """
     prokka --cpus ${task.cpus} --kingdom "Viruses" --genus "Betacoronavirus" --usegenus --outdir genbank --prefix ${sample} --proteins ${ref} ${fasta}
@@ -319,3 +319,17 @@ process prokka_annnotations {
 }
 
 // TODO: add ncbi genbank submissions manifest
+process sra_submission {
+    container "python:3.8.2-buster"
+    label "med_spu_mem"
+    publishDir "${params.output}/", mode: "copy", overwrite: true
+
+    input:
+        val(samples) from submit.collect()
+    output:
+        file("*")
+
+    """
+    annotations.py --help > annotations.tsv
+    """
+}
