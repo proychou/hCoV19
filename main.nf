@@ -52,7 +52,7 @@ process prokka_index {
 process fastqc_prereport  {
     container "quay.io/biocontainers/fastqc:0.11.9--0"
     label "fastqc_mem"
-    publishDir "${params.output}/fastqc/raw/", mode: "copy", overwrite: true
+    publishDir "${params.output}/fastqc/prereport/", mode: "copy", overwrite: true
 
     input:
         file(fastqs) from for_prereporting.collect{ file(it["fastq"]) }
@@ -116,16 +116,16 @@ process sam_to_bam {
 
 // Use bbduk to filter viral reads
 // TODO: Create github Issue about output folder structure
-process filter {
+process filter_viral {
     container "quay.io/biocontainers/bbmap:38.79--h516909a_0"
     label "med_cpu_mem"
-    publishDir "${params.output}/${sample}/", mode: "copy", overwrite: true
+    publishDir "${params.output}/${sample}/viral_filtering/", mode: "copy", overwrite: true
 
     input:
         tuple(val(sample), file(fastq)) from trimmed
         file(ref) from reference_fa
     output:
-        tuple(val(sample), file("matched.fastq.gz")) into (preprocessed, for_preprocessed_reporting)
+        tuple(val(sample), file("matched.fastq.gz")) into (processed, for_processed_reporting)
         file("unmatched.fastq.gz")
         file("stats_filtering.txt")
 
@@ -138,10 +138,10 @@ process filter {
 process fastqc_processed_report  {
     container "quay.io/biocontainers/fastqc:0.11.9--0"
     label "fastqc_mem"
-    publishDir "${params.output}/fastqc/preprocessed/", mode: "copy", overwrite: true
+    publishDir "${params.output}/fastqc/processed/", mode: "copy", overwrite: true
 
     input:
-        file(fastqs) from for_preprocessed_reporting.collect{ file(it[1]) }
+        file(fastqs) from for_processed_reporting.collect{ file(it[1]) }
     output:
        file("*")
 
@@ -158,7 +158,7 @@ process assemble {
     label "med_cpu_mem"
 
     input:
-        tuple(val(sample), file(fastq)) from preprocessed
+        tuple(val(sample), file(fastq)) from processed
     output:
         file("scaffolds.fasta") into scaffolds
 
