@@ -1,8 +1,23 @@
 //for_trim_sample_report.concat(for_filter_sample_report, for_scaffs_sample_report, for_filter_scaffs_sample_report).view() Author: Pavitra Roychoudhury
-Channel.fromPath("test/manifest.csv").splitCsv(header:true).into{samples; for_pre_report}
+// TODO: add two more samples to manifest.csv
+Channel.fromPath("test/manifest.csv").splitCsv(header:true).into{samples; for_pre_report; for_rename}
 reference_fa = file("refs/NC_045512.fasta")
 reference_gb = file("refs/NC_045512.gb")
 sra_template = file("Pathogen.cl.1.0.tsv")
+
+process raw {
+    container "ubuntu:18.04"
+    label "med_cpu_mem"
+
+    input:
+        tuple(val(sample), file(fastq)) from for_rename.map{ [it['sample'], file(it['fastq'])] }
+    output:
+        file("${sample}.${task.process}.fastq.gz") into for_raw_sample_report
+
+    """
+    mv ${fastq} ${sample}.${task.process}.fastq.gz
+    """
+}
 
 // TODO: make separate pipeline for reference creation, store in s3
 process bowtie_build {
@@ -320,6 +335,7 @@ process prokka_annnotations {
 }
 
 // TODO: add ncbi genbank submissions manifest
+// TODO: Write to Pavitra to figure out if we are submitting raw reads or full genomes
 process sra_submission {
     container "python:3.8.2-buster"
     label "med_cpu_mem"
@@ -342,7 +358,8 @@ process sample_counts {
     publishDir params.output, mode: "copy", overwrite: true
 
     input:
-        file(samples) from for_trim_sample_report.concat(
+        file(samples) from for_raw_sample_report.concat(
+                                for_trim_sample_report,
                                 for_filter_sample_report,
                                 for_scaffs_sample_report,
                                 for_filter_scaffs_sample_report).collect()
@@ -360,12 +377,12 @@ process multiqc_report {
     publishDir params.output, mode: "copy", overwrite: true
 
     input:
-        file(pre) from prereports
-        // file("post_report_*") from processed_reports
+        file("prereport/*") from prereports
+        file("post_report/*") from processed_reports
     output:
-        file("*")
+        file("multiqc_*")
 
     """
-    multiqc .
+    multiqc prereport post_report
     """
 }
