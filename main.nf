@@ -5,20 +5,6 @@ reference_fa = file("refs/NC_045512.fasta")
 reference_gb = file("refs/NC_045512.gb")
 sra_template = file("Pathogen.cl.1.0.tsv")
 
-process raw {
-    container "ubuntu:18.04"
-    label "med_cpu_mem"
-
-    input:
-        tuple(val(sample), file(fastq)) from for_rename.map{ [it['sample'], file(it['fastq'])] }
-    output:
-        file("${sample}.${task.process}.fastq.gz") into for_raw_sample_report
-
-    """
-    mv ${fastq} ${sample}.${task.process}.fastq.gz
-    """
-}
-
 // TODO: make separate pipeline for reference creation, store in s3
 process bowtie_build {
     container "quay.io/biocontainers/bowtie2:2.4.1--py38he513fc3_0"
@@ -60,6 +46,20 @@ process prokka_db {
 
     """
     prokka-genbank_to_fasta_db reference.gb > proteins.faa
+    """
+}
+
+process raw {
+    container "ubuntu:18.04"
+    label "med_cpu_mem"
+
+    input:
+        tuple(val(sample), file(fastq)) from for_rename.map{ [it['sample'], file(it['fastq'])] }
+    output:
+        file("${sample}.${task.process}.fastq.gz") into for_raw_sample_report
+
+    """
+    mv ${fastq} ${sample}.${task.process}.fastq.gz
     """
 }
 
