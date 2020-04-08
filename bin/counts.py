@@ -40,21 +40,21 @@ def main():
             count = sum(1 for l in seqs if l.startswith(start))
         basename = os.path.basename(sfile)
         sample, process, _ = basename.split('.', maxsplit=2)
-        procs.append([sample, process, count])
+        procs.append({'sample': sample, 'process': process, 'count': count})
     fieldnames = ['sample']
     for p in procs:
-        if p[1] not in fieldnames:
-            fieldnames.append(p[1])
+        if p['process'] not in fieldnames:
+            fieldnames.append(p['process'])
     rows = []
-    procs = sorted(procs, key=operator.itemgetter(0))
-    procs = itertools.groupby(procs, key=operator.itemgetter(0))
+    procs = sorted(procs, key=operator.itemgetter('sample'))
+    procs = itertools.groupby(procs, key=operator.itemgetter('sample'))
     rows = []
     for sa, pr in procs:
         r = {'sample': sa}
         for p in pr:
-            r.update({p[1]: p[2]})
+            r.update({p['process']: p['count']})
         rows.append(r)
-    if args.sortby:
+    if args.sortby and args.sortby in fieldnames:
         rows = sorted(rows, key=operator.itemgetter(args.sortby), reverse=True)
     report = csv.DictWriter(args.out, fieldnames=fieldnames)
     report.writeheader()
