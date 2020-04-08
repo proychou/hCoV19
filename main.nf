@@ -1,6 +1,5 @@
-//for_trim_sample_report.concat(for_filter_sample_report, for_scaffs_sample_report, for_filter_scaffs_sample_report).view() Author: Pavitra Roychoudhury
-// TODO: add two more samples to manifest.csv
-Channel.fromPath("test/manifest.csv").splitCsv(header:true).into{samples; for_pre_report; for_rename}
+// Author: Pavitra Roychoudhury
+Channel.fromPath("test/manifest.csv").splitCsv(header:true).into{samples; for_prereport; for_rename}
 reference_fa = file("refs/NC_045512.fasta")
 reference_gb = file("refs/NC_045512.gb")
 sra_template = file("Pathogen.cl.1.0.tsv")
@@ -70,7 +69,7 @@ process fastqc_prereport  {
     publishDir "${params.output}/fastqc/prereport/", mode: "copy", overwrite: true
 
     input:
-        file(fastqs) from for_pre_report.collect{ file(it["fastq"]) }
+        file(fastqs) from for_prereport.collect{ file(it["fastq"]) }
     output:
        file("*") into prereports
 
