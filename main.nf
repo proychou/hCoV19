@@ -7,7 +7,6 @@ sra_template = file("Pathogen.cl.1.0.tsv")
 // TODO: make separate pipeline for reference creation, store in s3
 process bowtie_build {
     container "quay.io/biocontainers/bowtie2:2.4.1--py38he513fc3_0"
-    label "med_cpu_mem"
 
     input:
         file(ref) from reference_fa
@@ -22,7 +21,6 @@ process bowtie_build {
 
 process bwa_index {
     container "quay.io/biocontainers/bwa:0.7.17--hed695b0_7"
-    label "med_cpu_mem"
 
     input:
         file(ref) from reference_fa
@@ -36,7 +34,6 @@ process bwa_index {
 
 process prokka_db {
     container "quay.io/biocontainers/prokka:1.14.6--pl526_0"
-    label "med_cpu_mem"
 
     input:
         file("reference.gb") from reference_gb
@@ -50,7 +47,6 @@ process prokka_db {
 
 process raw {
     container "ubuntu:18.04"
-    label "med_cpu_mem"
 
     input:
         tuple(val(sample), file(fastq)) from for_rename.map{ [it['sample'], file(it['fastq'])] }
@@ -81,7 +77,6 @@ process fastqc_prereport  {
 // Adapter trimming with bbduk
 process trimming {
     container "quay.io/biocontainers/bbmap:38.79--h516909a_0"
-    label "med_cpu_mem"
 
     input:
         tuple(val(sample), file(fastq)) from samples.map{ [ it["sample"], file(it["fastq"]) ] }
@@ -100,7 +95,6 @@ process trimming {
 // Map reads to reference
 process map_to_ref {
     container "quay.io/biocontainers/bowtie2:2.4.1--py38he513fc3_0"
-    label "med_cpu_mem"
 
     input:
         tuple(val(sample), file(fastq)) from for_reference_mapping
@@ -115,7 +109,6 @@ process map_to_ref {
 
 process sam_to_bam {
     container "quay.io/biocontainers/samtools:1.10--h9402c20_2"
-    label "med_cpu_mem"
 
     input:
         tuple(val(sample), file("alignment.sam")) from sam
@@ -132,7 +125,6 @@ process sam_to_bam {
 // TODO: Create github Issue about output folder structure
 process filter_viral {
     container "quay.io/biocontainers/bbmap:38.79--h516909a_0"
-    label "med_cpu_mem"
     publishDir "${params.output}/${sample}/viral_filtering/", mode: "copy", overwrite: true
 
     input:
@@ -152,7 +144,6 @@ process filter_viral {
 // FastQC report on processed reads
 process fastqc_processed_report  {
     container "quay.io/biocontainers/fastqc:0.11.9--0"
-    label "fastqc_mem"
     publishDir "${params.output}/fastqc/processed/", mode: "copy", overwrite: true
 
     input:
@@ -169,7 +160,6 @@ process fastqc_processed_report  {
 // FIXME: fix error here with some samples..
 process assemble_scaffolds {
     container "quay.io/biocontainers/spades:3.14.0--h2d02072_0"
-    label "med_cpu_mem"
 
     input:
         tuple(val(sample), file(fastq)) from processed
@@ -190,12 +180,12 @@ process filter_scaffolds {
     input:
         tuple(val(sample), file(scaffolds)) from scaffolds
     output:
-        file('filtered_scaffolds.fasta') into filtered_scaffolds
+        tuple(val(sample), file('filtered_scaffolds.fasta')) into filtered_scaffolds
         file("${sample}.${task.process}.fasta") into for_filter_scaffs_sample_report
 
     //TODO: min_len and min_cov as params?
     """
-    filter_scaffolds.R ${scaffolds} filtered_scaffolds.fasta 200 0
+    filter_scaffolds.R ${scaffolds} filtered_scaffolds.fasta 200 10
     cp scaffolds.fasta ${sample}.${task.process}.fasta
     """
 }
@@ -207,11 +197,11 @@ process align_scaffolds {
     container 'quay.io/biocontainers/bwa:0.7.17--hed695b0_7'
 
     input:
-        file(scaffold) from filtered_scaffolds
+        tuple(val(sample), file(scaffold)) from filtered_scaffolds
         file(ref_fa) from reference_fa
         file('') from bwa_ref
     output:
-        file('filtered_scaffolds.sam') into aligned_contigs
+        tuple(val(sample), file('filtered_scaffolds.sam')) into aligned_contigs
 
     """
     bwa mem ${ref_fa} ${scaffold} > filtered_scaffolds.sam
@@ -222,10 +212,10 @@ process scaffolds_sam_to_bam {
     container 'quay.io/biocontainers/samtools:1.10--h9402c20_2'
 
     input:
-        file(contig_sam) from aligned_contigs
+        tuple(val(sample), file(contig_sam)) from aligned_contigs
         file(ref_fa) from reference_fa
     output:
-        file('filtered_scaffolds_sorted.bam') into filtered_scaffold_bam
+        tuple(val(sample), file('filtered_scaffolds_sorted.bam')) into filtered_scaffold_bam
 
     // TODO: samtools sort --help: -m INT Set maximum memory per thread; suffix K/M/G recognized [768M]
     """
@@ -240,20 +230,20 @@ process scaffolds_bam_to_consensus {
     container 'bioconductor/release_core2:R3.6.2_Bioc3.10'
 
     input:
-        file(bam) from filtered_scaffold_bam
+        tuple(val(sample), file(bam)) from filtered_scaffold_bam
         file(ref_fa) from reference_fa
     output:
         file('scaffold_consensus.fasta') into consensus
+        file("${sample}.${task.process}.fasta") into for_scaffs_consensus_report
 
     """
     make_ref_from_assembly.R ${bam} ${ref_fa} scaffold_consensus.fasta
+    cp scaffold_consensus.fasta ${sample}.${task.process}.fasta
     """
 }
 
 process bowtie_build_consensus {
     container "quay.io/biocontainers/bowtie2:2.4.1--py38he513fc3_0"
-
-    label "med_cpu_mem"
 
     input:
         file("consensus.fasta") from consensus
@@ -268,8 +258,6 @@ process bowtie_build_consensus {
 process map_to_consensus {
     container "quay.io/biocontainers/bowtie2:2.4.1--py38he513fc3_0"
 
-    label "med_cpu_mem"
-
     input:
         file(fastq) from for_consensus_mapping
         file("") from consensus_build
@@ -283,7 +271,6 @@ process map_to_consensus {
 
 process consensus_sam_to_bam {
     container "quay.io/biocontainers/samtools:1.10--h9402c20_2"
-    label "med_cpu_mem"
 
     input:
         file("alignment.sam") from remap_sam
@@ -298,7 +285,6 @@ process consensus_sam_to_bam {
 
 process final_consensus {
     container 'bioconductor/release_core2:R3.6.2_Bioc3.10'
-    label "med_cpu_mem"
     publishDir "${params.output}/${sample}/", mode: "copy", overwrite: true
 
     input:
@@ -319,7 +305,6 @@ process final_consensus {
 // TODO: check if prokka needs contigs to be >20 chars long
 process prokka_annnotations {
     container "quay.io/biocontainers/prokka:1.14.6--pl526_0"
-    label "med_cpu_mem"
     publishDir "${params.output}/${sample}/", mode:"copy", overwrite: true
 
     input:
@@ -337,7 +322,6 @@ process prokka_annnotations {
 // TODO: Write to Pavitra to figure out if we are submitting raw reads or full genomes
 process sra_submission {
     container "python:3.8.2-buster"
-    label "med_cpu_mem"
     publishDir params.output, mode: "copy", overwrite: true
 
     input:
@@ -353,7 +337,6 @@ process sra_submission {
 
 process sample_counts {
     container "python:3.8.2-buster"
-    label "med_cpu_mem"
     publishDir params.output, mode: "copy", overwrite: true
 
     input:
@@ -361,7 +344,8 @@ process sample_counts {
                                 for_trim_sample_report,
                                 for_filter_sample_report,
                                 for_scaffs_sample_report,
-                                for_filter_scaffs_sample_report).collect()
+                                for_filter_scaffs_sample_report,
+                                for_scaffs_consensus_report).collect()
     output:
         file('counts.csv')
 
@@ -372,7 +356,6 @@ process sample_counts {
 
 process multiqc_report {
     container "quay.io/biocontainers/multiqc:1.8--py_2"
-    label "med_cpu_mem"
     publishDir params.output, mode: "copy", overwrite: true
 
     input:
