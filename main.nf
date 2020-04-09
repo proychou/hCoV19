@@ -318,23 +318,6 @@ process prokka_annnotations {
     """
 }
 
-// TODO: add ncbi genbank submissions manifest
-// TODO: Write to Pavitra to figure out if we are submitting raw reads or full genomes
-process sra_submission {
-    container "python:3.8.2-buster"
-    publishDir params.output, mode: "copy", overwrite: true
-
-    input:
-        val(samples) from submit.collect()
-        file(template) from sra_template
-    output:
-        file("*")
-
-    """
-    annotations.py --help > annotations.tsv
-    """
-}
-
 process sample_counts {
     container "python:3.8.2-buster"
     publishDir params.output, mode: "copy", overwrite: true
