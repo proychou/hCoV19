@@ -122,7 +122,6 @@ process sam_to_bam {
 }
 
 // Use bbduk to filter viral reads
-// TODO: Create github Issue about output folder structure
 process filter_viral {
     container "quay.io/biocontainers/bbmap:38.79--h516909a_0"
     publishDir "${params.output}/${sample}/viral_filtering/", mode: "copy", overwrite: true
@@ -312,9 +311,12 @@ process prokka_annnotations {
         file(ref) from prokka_ref
     output:
         val(sample) into submit
+        file("genbank/*")
+        file("${sample}.${task.process}.fasta") into for_prokka_reporting
 
     """
     prokka --cpus ${task.cpus} --kingdom "Viruses" --genus "Betacoronavirus" --usegenus --outdir genbank --prefix ${sample} --proteins ${ref} ${fasta}
+    cp genbank/${sample}.fna ${sample}.${task.process}.fasta
     """
 }
 
@@ -328,7 +330,8 @@ process sample_counts {
                                 for_filter_sample_report,
                                 for_scaffs_sample_report,
                                 for_filter_scaffs_sample_report,
-                                for_scaffs_consensus_report).collect()
+                                for_scaffs_consensus_report,
+                                for_prokka_reporting).collect()
     output:
         file('counts.csv')
 
