@@ -2,6 +2,7 @@
 Channel
     .fromPath("test/manifest.csv")
     .splitCsv(header:true)
+    .take(params.take)
     .map{[it['sample'], file(params.data + '/' + it['fastq'])]}
     .into{samples; for_prereport; for_rename}
 reference_fa = file("refs/NC_045512.fasta")
