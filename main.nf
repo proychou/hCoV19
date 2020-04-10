@@ -1,5 +1,9 @@
 // Author: Pavitra Roychoudhury
-Channel.fromPath("test/manifest.csv").splitCsv(header:true).into{samples; for_prereport; for_rename}
+Channel
+    .fromPath("test/manifest.csv")
+    .splitCsv(header:true)
+    .map{[it['sample'], file(params.data + '/' + it['fastq'])]}
+    .into{samples; for_prereport; for_rename}
 reference_fa = file("refs/NC_045512.fasta")
 reference_gb = file("refs/NC_045512.gb")
 sra_template = file("Pathogen.cl.1.0.tsv")
@@ -49,7 +53,7 @@ process raw {
     container "ubuntu:18.04"
 
     input:
-        tuple(val(sample), file(fastq)) from for_rename.map{ [it['sample'], file(it['fastq'])] }
+        tuple(val(sample), file(fastq)) from for_rename
     output:
         file("${sample}.${task.process}.fastq.gz") into for_raw_sample_report
 
@@ -65,7 +69,7 @@ process fastqc_prereport  {
     publishDir "${params.output}/fastqc/prereport/", mode: "copy", overwrite: true
 
     input:
-        file(fastqs) from for_prereport.collect{ file(it["fastq"]) }
+        file(fastqs) from for_prereport.collect{ it[1] }
     output:
        file("*") into prereports
 
@@ -79,7 +83,7 @@ process trimming {
     container "quay.io/biocontainers/bbmap:38.79--h516909a_0"
 
     input:
-        tuple(val(sample), file(fastq)) from samples.map{ [ it["sample"], file(it["fastq"]) ] }
+        tuple(val(sample), file(fastq)) from samples
     output:
         tuple(val(sample), file("${sample}.${task.process}.fastq.gz")) into (trimmed, for_reference_mapping)
         file("${sample}.${task.process}.fastq.gz") into (for_trim_sample_report, for_consensus_mapping)
