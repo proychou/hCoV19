@@ -48,7 +48,6 @@ def main():
     rows = []
     procs = sorted(procs, key=operator.itemgetter('sample'))
     procs = itertools.groupby(procs, key=operator.itemgetter('sample'))
-    rows = []
     for sa, pr in procs:
         r = {'sample': sa}
         for p in pr:
