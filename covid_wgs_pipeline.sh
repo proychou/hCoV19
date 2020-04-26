@@ -253,10 +253,11 @@ bowtie2-build -q './ref_for_remapping/'$sampname'_aligned_scaffolds_'$ref_bowtie
 remapped_bamfname='./remapped_reads/'$sampname'.bam'
 if [[ $paired == "true" ]]
 then
-bowtie2 -x $remapping_btref -1 './preprocessed_fastq/'$sampname'_preprocessed_paired_r1.fastq.gz' -2 './preprocessed_fastq/'$sampname'_preprocessed_paired_r2.fastq.gz' -p ${SLURM_CPUS_PER_TASK} | samtools view -bS - > $remapped_bamfname
+echo 'paired end not tested'
+# bowtie2 -x $remapping_btref -1 './preprocessed_fastq/'$sampname'_preprocessed_paired_r1.fastq.gz' -2 './preprocessed_fastq/'$sampname'_preprocessed_paired_r2.fastq.gz' -p ${SLURM_CPUS_PER_TASK} | samtools view -bS - > $remapped_bamfname
 elif [[ $paired == "false" ]]
 then
-bowtie2 -x $remapping_btref -U './preprocessed_fastq/'$sampname'_preprocessed.fastq.gz' -p ${SLURM_CPUS_PER_TASK} | samtools view -bS - > $remapped_bamfname
+bowtie2 -x $remapping_btref -U $processed_fastq -p ${SLURM_CPUS_PER_TASK} | samtools view -bS - > $remapped_bamfname
 fi
 
 
