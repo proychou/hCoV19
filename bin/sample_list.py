@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import csv
+import datetime
 import itertools
 import glob
 import gzip
@@ -28,7 +29,7 @@ def main():
     fastqs = [os.path.abspath(f) for f in fastqs]
     fastqs = sorted(fastqs, key=lambda x: os.path.dirname(x))
     fieldnames = ['sample', 'R1', 'R2', 'length', 'count',
-                  'library', 'fcid', 'lane', 'I1', 'I2']
+                  'library', 'fcid', 'lane', 'I1', 'I2', 'date']
     report = csv.DictWriter(args.out, fieldnames=fieldnames)
     report.writeheader()
     for p, f in itertools.groupby(fastqs, key=lambda x: os.path.dirname(x)):
@@ -44,14 +45,15 @@ def main():
             length = len(next(fopen))
         report.writerow({
             'count': count,
+            'date': datetime.date.today().strftime('%d-%b-%Y'),
             'fcid': fcid,
             'I1': i1,
             'I2': i2,
             'library': library_type,
             'length': length,
             'lane': lane,
-            'R1': f[0],
-            'R2': f.get(1, None),
+            'R1': os.path.basename(f[0]),
+            'R2': os.path.basename(f[1]) if len(f) > 1 else None,
             'sample': sample_id,
             })
         if args.samplelist:
