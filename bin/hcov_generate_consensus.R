@@ -112,7 +112,7 @@ mapping_stats <- data.frame(
     ref=refname,
     remapped_bam=NA,
     mappedtoref_bam=NA,
-    mapped_reads_ref=unlist(lapply(mappedtoref_bam, n_mapped_reads)),
+    # mapped_reads_ref=unlist(lapply(mappedtoref_bam, n_mapped_reads)),
     mapped_reads_assemblyref=unlist(lapply(remapped_bam, n_mapped_reads)),
     perc_Ns=100 * num_Ns / width,
     num_Ns=num_Ns,

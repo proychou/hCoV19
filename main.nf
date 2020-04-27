@@ -114,11 +114,26 @@ process sam_to_bam {
     input:
         tuple(val(sample), file("alignment.sam")) from sam
     output:
-        tuple(val(sample), file("sorted.bam")) into sorted
+        tuple(val(sample), file("sorted.bam")) into (sorted, for_counting)
 
     """
     samtools view --threads ${task.cpus} -b alignment.sam |
     samtools sort -m ${(task.memory.toMega()/task.cpus).intValue()}M --threads ${task.cpus} -o sorted.bam
+    """
+}
+
+process mapped_reads_ref {
+    container "quay.io/biocontainers/pysam:0.15.4--py37hbcae180_0"
+    publishDir "${params.output}/${sample}/", mode: "copy", overwrite: true
+
+    input:
+        tuple(val(sample), file(bam)) from for_counting
+
+    output:
+        file("count.csv") into mapped_reads_ref_counts
+
+    """
+    mapped_reads_ref.py --out count.csv ${sample} ${bam}
     """
 }
 
@@ -138,21 +153,6 @@ process filter_viral {
 
     """
     bbduk.sh in=${fastq} out=unmatched.fastq.gz outm=viral.fastq.gz ref=${ref} hdist=2 k=31 stats=stats_filtering.txt --threads=${task.cpus}
-    """
-}
-
-process viral_stats {
-    container "python:3.8.2-buster"
-    publishDir "${params.output}/${sample}/viral_filtering/", mode: "copy", overwrite: true
-
-    input:
-        tuple(val(sample), file(fastq)) from for_viral_stats
-        file(ref) from reference_fa
-    output:
-        file("counts.csv") into viral_reads_count
-
-    """
-    viral_stats.py --out counts.csv ${sample} ${fastq}
     """
 }
 
@@ -338,13 +338,16 @@ process sample_report {
     publishDir params.output, mode: "copy", overwrite: true
 
     input:
-        file('*.csv') from raw_stats.concat(viral_reads_count, scaffolds_stats, mapping_stats).collect()
+        file('*.csv') from raw_stats.concat(
+                            mapped_reads_ref_counts,
+                            scaffolds_stats,
+                            mapping_stats).collect()
 
     output:
         file("report.csv")
 
     """
-    sample_report.py --out report.csv sample,paired,length,count,fcid,I1,I2,library,lane,viral,mean_coverage,mean_length,scaffolds,mapped_reads_ref,mapped_reads_assemblyref,perc_Ns,num_Ns,width *.csv
+    sample_report.py --out report.csv sample,run,R1,R2,length,count,mapped_reads_ref,mean_coverage,perc_Ns,date *.csv
     """
 }
 
