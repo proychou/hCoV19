@@ -1,5 +1,9 @@
 // Author: Pavitra Roychoudhury
-Channel.fromPath(params.data).into{samples; for_prereport}
+Channel.fromPath(params.manifest)
+       .splitCsv(header: true)
+       .take(params.take)
+       .map{ [it['sample'], file(params.datadir + it['fastq'])] }
+       .into{samples; for_raw_stats; for_prereport}
 reference_fa = file("refs/NC_045512.fasta")
 reference_gb = file("refs/NC_045512.gb")
 
@@ -44,22 +48,6 @@ process prokka_db {
     """
 }
 
-process parse_sample_id {
-    container "python:3.8.2-buster"
-    publishDir params.output, mode: "copy", overwrite: true
-
-    input:
-        file(fastq) from samples
-
-    output:
-        tuple(stdout, file(fastq)) into sample_list
-        file("sample_stats.csv") into raw_stats
-
-    """
-    sample_id.py ${fastq} sample_stats.csv
-    """
-}
-
 // FastQC report on raw reads
 process fastqc_prereport  {
     container "quay.io/biocontainers/fastqc:0.11.9--0"
@@ -67,12 +55,26 @@ process fastqc_prereport  {
     publishDir "${params.output}/fastqc/prereport/", mode: "copy", overwrite: true
 
     input:
-        file("*.fastq.gz") from for_prereport.collect()
+        file("*.fastq.gz") from for_prereport.collect{ it[1] }
     output:
-       file("*") into prereports
+        file("*") into prereports
 
     """
     zcat *.fastq.gz | fastqc --threads ${task.cpus} stdin:report
+    """
+}
+
+process generate_raw_stats {
+    container "python:3.8.2-buster"
+
+    input:
+        tuple(val(sample), file(fastq)) from for_raw_stats
+
+    output:
+        file("raw_stats.csv") into raw_stats
+
+    """
+    raw_stats.py --out raw_stats.csv ${sample} ${fastq}
     """
 }
 
@@ -81,7 +83,7 @@ process trimming {
     container "quay.io/biocontainers/bbmap:38.79--h516909a_0"
 
     input:
-        tuple(val(sample), file(fastq)) from sample_list
+        tuple(val(sample), file(fastq)) from samples
     output:
         tuple(val(sample), file("trimmed.fastq.gz")) into (trimmed, for_reference_mapping, for_consensus_mapping)
 
