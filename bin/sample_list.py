@@ -28,8 +28,8 @@ def main():
     fastqs = itertools.islice(glob.iglob(path, recursive=True), take)
     fastqs = [os.path.abspath(f) for f in fastqs]
     fastqs = sorted(fastqs, key=lambda x: os.path.dirname(x))
-    fieldnames = ['sample', 'R1', 'R2', 'length', 'count',
-                  'library', 'fcid', 'lane', 'I1', 'I2', 'date']
+    fieldnames = ['sample', 'R1', 'R2', 'length', 'raw_read_count',
+                  'library', 'fcid', 'lane', 'I1', 'I2', 'analysis_date']
     report = csv.DictWriter(args.out, fieldnames=fieldnames)
     report.writeheader()
     for p, f in itertools.groupby(fastqs, key=lambda x: os.path.dirname(x)):
@@ -44,8 +44,7 @@ def main():
             next(fopen)
             length = len(next(fopen))
         report.writerow({
-            'count': count,
-            'date': datetime.date.today().strftime('%d-%b-%Y'),
+            'analysis_date': datetime.date.today().strftime('%d-%b-%Y'),
             'fcid': fcid,
             'I1': i1,
             'I2': i2,
@@ -54,6 +53,7 @@ def main():
             'lane': lane,
             'R1': os.path.basename(f[0]),
             'R2': os.path.basename(f[1]) if len(f) > 1 else None,
+            'raw_read_count': count,
             'sample': sample_id,
             })
         if args.samplelist:
