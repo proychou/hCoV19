@@ -24,8 +24,8 @@ cov<-unlist(lapply(names(contigs), function(x){
 }))
 report<-data.frame(
   'sample'=sample,
-  'mean_coverage'=mean(cov),
-  'mean_length'=mean(width(contigs)))
+  'mean_coverage'=format(round(mean(cov), 2), nsmall=2),
+  'mean_length'=format(round(mean(width(contigs)), 2), nsmall=2))
 contigs<-contigs[cov > min_cov]  ## fix for spades
 report$'scaffolds'<-length(contigs)
 write.csv(report, filtered_report, row.names=FALSE)

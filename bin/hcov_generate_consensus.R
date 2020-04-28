@@ -92,6 +92,7 @@ sample <- args[1]
 
 ## consensus is generated from remapped_bam
 remapped_bam <- args[2]
+print(remapped_bam)
 
 ## stats are calculated from mappedtoref_bam
 mappedtoref_bam <- args[3]
@@ -106,6 +107,7 @@ writeXStringSet(con_seq, file=final_cons, format='fasta')
 
 num_Ns <- sum(letterFrequency(con_seq,c('N','+')))
 width <- width(con_seq)
+perc_Ns <- mean(100 * num_Ns / width)
 
 mapping_stats <- data.frame(
     sample=sample,
@@ -114,12 +116,11 @@ mapping_stats <- data.frame(
     mappedtoref_bam=NA,
     # mapped_reads_ref=unlist(lapply(mappedtoref_bam, n_mapped_reads)),
     mapped_reads_assemblyref=unlist(lapply(remapped_bam, n_mapped_reads)),
-    perc_Ns=100 * num_Ns / width,
+    perc_Ns=if (is.nan(perc_Ns)) '' else format(round(perc_Ns, 2), nsmall=2),
     num_Ns=num_Ns,
     width=width,
     stringsAsFactors=FALSE
 )
 
 write.csv(mapping_stats, file=stats_csv, row.names=FALSE)
-
 
