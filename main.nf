@@ -1,4 +1,5 @@
 // Author: Pavitra Roychoudhury
+Channel.fromPath(params.data).into{samples; for_prereport}
 reference_fa = file("refs/NC_045512.fasta")
 reference_gb = file("refs/NC_045512.gb")
 
@@ -43,19 +44,19 @@ process prokka_db {
     """
 }
 
-process parse_sample_list {
+process parse_sample_id {
     container "python:3.8.2-buster"
     publishDir params.output, mode: "copy", overwrite: true
 
     input:
-        path(datadir) from Channel.fromPath(params.datadir)
+        file(fastq) from samples
 
     output:
+        tuple(stdout, file(fastq)) into sample_list
         file("sample_stats.csv") into raw_stats
-        file("samples.csv") into (sample_list, for_prereport)
 
     """
-    sample_list.py --out sample_stats.csv --samplelist samples.csv --take ${params.take} ${datadir}
+    sample_id.py ${fastq} sample_stats.csv
     """
 }
 
@@ -66,7 +67,7 @@ process fastqc_prereport  {
     publishDir "${params.output}/fastqc/prereport/", mode: "copy", overwrite: true
 
     input:
-        file("*.fastq.gz") from for_prereport.splitCsv().collect{ file(it[1]) }
+        file("*.fastq.gz") from for_prereport.collect{ file(it[1]) }
     output:
        file("*") into prereports
 
@@ -80,7 +81,7 @@ process trimming {
     container "quay.io/biocontainers/bbmap:38.79--h516909a_0"
 
     input:
-        tuple(val(sample), file(fastq)) from sample_list.splitCsv().map{ [it[0], file(it[1])] }
+        tuple(val(sample), file(fastq)) from sample_list
     output:
         tuple(val(sample), file("trimmed.fastq.gz")) into (trimmed, for_reference_mapping, for_consensus_mapping)
 
@@ -343,7 +344,7 @@ process sample_report {
         file("report.csv")
 
     """
-    sample_report.py --out report.csv sample,run,R1,R2,length,raw_read_count,mapped_reads_ref,mean_coverage,perc_Ns,analysis_date *.csv
+    sample_report.py --out report.csv sample,run,fastq,length,raw_read_count,mapped_reads_ref,mean_coverage,perc_Ns,analysis_date *.csv
     """
 }
 
