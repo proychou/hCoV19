@@ -67,7 +67,7 @@ process fastqc_prereport  {
     publishDir "${params.output}/fastqc/prereport/", mode: "copy", overwrite: true
 
     input:
-        file("*.fastq.gz") from for_prereport.collect{ file(it[1]) }
+        file("*.fastq.gz") from for_prereport.collect()
     output:
        file("*") into prereports
 
