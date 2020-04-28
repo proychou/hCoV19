@@ -4,10 +4,12 @@ library(Biostrings)
 
 ## keep command line argument parsing simple for now - argparse would be better
 args <- commandArgs(TRUE)
-scaffname <- args[1]
-scaffname_filtered <- args[2]
-min_len <- as.numeric(args[3])
-min_cov <- as.numeric(args[4])
+sample <- args[1]
+scaffname <- args[2]
+scaffname_filtered <- args[3]
+filtered_report <- args[4]
+min_len <- as.numeric(args[5])
+min_cov <- as.numeric(args[6])
 
 ## min_width <- 200
 ## ## min_cov <- 10
@@ -20,5 +22,11 @@ contigs<-contigs[width(contigs) > min_len]
 cov<-unlist(lapply(names(contigs), function(x){
   as.numeric(strsplit(x,'_cov_')[[1]][2])
 }))
+report<-data.frame(
+  'sample'=sample,
+  'mean_coverage'=format(round(mean(cov), 2), nsmall=2),
+  'mean_length'=format(round(mean(width(contigs)), 2), nsmall=2))
 contigs<-contigs[cov > min_cov]  ## fix for spades
+report$'scaffolds'<-length(contigs)
+write.csv(report, filtered_report, row.names=FALSE)
 writeXStringSet(contigs, scaffname_filtered)

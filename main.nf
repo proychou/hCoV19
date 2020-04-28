@@ -1,13 +1,6 @@
 // Author: Pavitra Roychoudhury
-Channel
-    .fromPath("test/manifest.csv")
-    .splitCsv(header:true)
-    .take(params.take)
-    .map{[it['sample'], file(params.data + '/' + it['fastq'])]}
-    .into{samples; for_prereport; for_rename}
 reference_fa = file("refs/NC_045512.fasta")
 reference_gb = file("refs/NC_045512.gb")
-sra_template = file("Pathogen.cl.1.0.tsv")
 
 // TODO: make separate pipeline for reference creation, store in s3
 process bowtie_build {
@@ -50,16 +43,19 @@ process prokka_db {
     """
 }
 
-process raw {
-    container "ubuntu:18.04"
+process parse_sample_list {
+    container "python:3.8.2-buster"
+    publishDir params.output, mode: "copy", overwrite: true
 
     input:
-        tuple(val(sample), file(fastq)) from for_rename
+        path(datadir) from Channel.fromPath(params.datadir)
+
     output:
-        file("${sample}.${task.process}.fastq.gz") into for_raw_sample_report
+        file("sample_stats.csv") into raw_stats
+        file("samples.csv") into (sample_list, for_prereport)
 
     """
-    mv ${fastq} ${sample}.${task.process}.fastq.gz
+    sample_list.py --out sample_stats.csv --samplelist samples.csv --take ${params.take} ${datadir}
     """
 }
 
@@ -70,12 +66,12 @@ process fastqc_prereport  {
     publishDir "${params.output}/fastqc/prereport/", mode: "copy", overwrite: true
 
     input:
-        file(fastqs) from for_prereport.collect{ it[1] }
+        file("*.fastq.gz") from for_prereport.splitCsv().collect{ file(it[1]) }
     output:
        file("*") into prereports
 
     """
-    zcat ${fastqs} | fastqc --threads ${task.cpus} stdin:report
+    zcat *.fastq.gz | fastqc --threads ${task.cpus} stdin:report
     """
 }
 
@@ -84,16 +80,15 @@ process trimming {
     container "quay.io/biocontainers/bbmap:38.79--h516909a_0"
 
     input:
-        tuple(val(sample), file(fastq)) from samples
+        tuple(val(sample), file(fastq)) from sample_list.splitCsv().map{ [it[0], file(it[1])] }
     output:
-        tuple(val(sample), file("${sample}.${task.process}.fastq.gz")) into (trimmed, for_reference_mapping)
-        file("${sample}.${task.process}.fastq.gz") into (for_trim_sample_report, for_consensus_mapping)
+        tuple(val(sample), file("trimmed.fastq.gz")) into (trimmed, for_reference_mapping, for_consensus_mapping)
 
     // bbduk --help: When piping interleaving must be explicitly stated: int=f unpaired, int=t for paired
     """
     bbduk.sh in=${fastq} out=stdout.fq hdist=2 interleaved=f k=21 ktrim=r mink=4 ref=adapters,artifacts threads=${task.cpus} |
     bbduk.sh in=stdin.fq out=stdout.fq hdist=2 interleaved=f k=21 ktrim=l mink=4 ref=adapters,artifacts threads=${task.cpus} |
-    bbduk.sh in=stdin.fq out=${sample}.${task.process}.fastq.gz interleaved=f maq=10 minlen=20 qtrim=rl trimq=20 threads=${task.cpus}
+    bbduk.sh in=stdin.fq out=trimmed.fastq.gz interleaved=f maq=10 minlen=20 qtrim=rl trimq=20 threads=${task.cpus}
     """
 }
 
@@ -114,15 +109,31 @@ process map_to_ref {
 
 process sam_to_bam {
     container "quay.io/biocontainers/samtools:1.10--h9402c20_2"
+    publishDir "${params.output}/${sample}/", mode: "copy", overwrite: true
 
     input:
         tuple(val(sample), file("alignment.sam")) from sam
     output:
-        tuple(val(sample), file("sorted.bam")) into sorted
+        tuple(val(sample), file("sorted.bam")) into (sorted, for_counting)
 
     """
     samtools view --threads ${task.cpus} -b alignment.sam |
     samtools sort -m ${(task.memory.toMega()/task.cpus).intValue()}M --threads ${task.cpus} -o sorted.bam
+    """
+}
+
+process mapped_reads_ref {
+    container "quay.io/biocontainers/pysam:0.15.4--py37hbcae180_0"
+    publishDir "${params.output}/${sample}/", mode: "copy", overwrite: true
+
+    input:
+        tuple(val(sample), file(bam)) from for_counting
+
+    output:
+        file("count.csv") into mapped_reads_ref_counts
+
+    """
+    mapped_reads_ref.py --out count.csv ${sample} ${bam}
     """
 }
 
@@ -135,13 +146,13 @@ process filter_viral {
         tuple(val(sample), file(fastq)) from trimmed
         file(ref) from reference_fa
     output:
-        tuple(val(sample), file("${sample}.${task.process}.fastq.gz")) into processed
-        file("${sample}.${task.process}.fastq.gz") into (for_processed_report, for_filter_sample_report)
+        tuple(val(sample), file("viral.fastq.gz")) into processed
+        file("viral.fastq.gz") into for_processed_report
         file("unmatched.fastq.gz")
         file("stats_filtering.txt")
 
     """
-    bbduk.sh in=${fastq} out=unmatched.fastq.gz outm=${sample}.${task.process}.fastq.gz ref=${ref} hdist=2 k=31 stats=stats_filtering.txt --threads=${task.cpus}
+    bbduk.sh in=${fastq} out=unmatched.fastq.gz outm=viral.fastq.gz ref=${ref} hdist=2 k=31 stats=stats_filtering.txt --threads=${task.cpus}
     """
 }
 
@@ -151,12 +162,12 @@ process fastqc_processed_report  {
     publishDir "${params.output}/fastqc/processed/", mode: "copy", overwrite: true
 
     input:
-        file(fastqs) from for_processed_report.collect()
+        file("*.fastq.gz") from for_processed_report.collect()
     output:
        file("*") into processed_reports
 
     """
-    zcat ${fastqs} | fastqc --threads ${task.cpus} stdin:report
+    zcat *.fastq.gz | fastqc --threads ${task.cpus} stdin:report
     """
 }
 
@@ -164,33 +175,33 @@ process fastqc_processed_report  {
 // FIXME: fix error here with some samples..
 process assemble_scaffolds {
     container "quay.io/biocontainers/spades:3.14.0--h2d02072_0"
+    publishDir "${params.output}/${sample}/", mode: "copy", overwrite: true
 
     input:
         tuple(val(sample), file(fastq)) from processed
     output:
         tuple(val(sample), file("scaffolds.fasta")) into scaffolds
-        file("${sample}.${task.process}.fasta") into for_scaffs_sample_report
 
     """
     spades.py --careful --memory ${task.memory.toGiga() * 8} --threads ${task.cpus} -s ${fastq} -o .
-    cp scaffolds.fasta ${sample}.${task.process}.fasta
     """
 }
 
 // lifted scaffold filtering out of hcov_make_seq.R
 process filter_scaffolds {
     container 'bioconductor/release_core2:R3.6.2_Bioc3.10'
+    publishDir "${params.output}/${sample}/", mode: "copy", overwrite: true
 
     input:
         tuple(val(sample), file(scaffolds)) from scaffolds
     output:
-        tuple(val(sample), file('filtered_scaffolds.fasta')) into filtered_scaffolds
-        file("${sample}.${task.process}.fasta") into for_filter_scaffs_sample_report
+        tuple(val(sample), file("filtered_scaffolds.fasta")) into filtered_scaffolds
+        file("stats.csv") into scaffolds_stats
 
     //TODO: min_len and min_cov as params?
+    //TODO: output mean coverage
     """
-    filter_scaffolds.R ${scaffolds} filtered_scaffolds.fasta 200 10
-    cp scaffolds.fasta ${sample}.${task.process}.fasta
+    filter_scaffolds.R ${sample} ${scaffolds} filtered_scaffolds.fasta stats.csv 200 10
     """
 }
 
@@ -237,12 +248,10 @@ process scaffolds_bam_to_consensus {
         tuple(val(sample), file(bam)) from filtered_scaffold_bam
         file(ref_fa) from reference_fa
     output:
-        file('scaffold_consensus.fasta') into consensus
-        file("${sample}.${task.process}.fasta") into for_scaffs_consensus_report
+        tuple(val(sample), file('scaffold_consensus.fasta')) into consensus
 
     """
     make_ref_from_assembly.R ${bam} ${ref_fa} scaffold_consensus.fasta
-    cp scaffold_consensus.fasta ${sample}.${task.process}.fasta
     """
 }
 
@@ -250,9 +259,9 @@ process bowtie_build_consensus {
     container "quay.io/biocontainers/bowtie2:2.4.1--py38he513fc3_0"
 
     input:
-        file("consensus.fasta") from consensus
+        tuple(val(sample), file("consensus.fasta")) from consensus
     output:
-        file("*.bt2") into consensus_build
+        tuple(val(sample), file("*.bt2")) into consensus_build
 
     """
     bowtie2-build --threads ${task.cpus} consensus.fasta reference
@@ -263,10 +272,9 @@ process map_to_consensus {
     container "quay.io/biocontainers/bowtie2:2.4.1--py38he513fc3_0"
 
     input:
-        file(fastq) from for_consensus_mapping
-        file("") from consensus_build
+        tuple(val(sample), file(fastq), file("")) from for_consensus_mapping.join(consensus_build)
     output:
-        file("alignment.sam") into remap_sam
+        tuple(val(sample), file("alignment.sam")) into remap_sam
 
     """
     bowtie2 --threads ${task.cpus} -x reference -U ${fastq} -S alignment.sam
@@ -277,9 +285,9 @@ process consensus_sam_to_bam {
     container "quay.io/biocontainers/samtools:1.10--h9402c20_2"
 
     input:
-        file("alignment.sam") from remap_sam
+        tuple(val(sample), file("alignment.sam")) from remap_sam
     output:
-        file("remap_sorted.bam") into remap_sorted
+        tuple(val(sample), file("remap_sorted.bam")) into remap_sorted
 
     """
     samtools view --threads ${task.cpus} -b alignment.sam |
@@ -289,25 +297,23 @@ process consensus_sam_to_bam {
 
 process final_consensus {
     container 'bioconductor/release_core2:R3.6.2_Bioc3.10'
-    publishDir "${params.output}/${sample}/", mode: "copy", overwrite: true
+    publishDir "${params.output}/${sample}/", mode:"copy", overwrite: true
 
     input:
-        file(remapped_bam) from remap_sorted
-        tuple(val(sample), file(mapped_bam)) from sorted
+        tuple(val(sample), file(mapped_bam), file(remapped_bam)) from sorted.join(remap_sorted)
     output:
         tuple(val(sample), file('final_consensus.fasta')) into final_cons
         file('mapping_stats.csv') into mapping_stats
 
-    // TODO: inject sample name -- see val(sample) ^^
     // FIXME: final_cons seqname must be sample name for prokka genbank LOCUS
     """
-    hcov_generate_consensus.R ${remapped_bam} ${mapped_bam} ${reference_fa} \
+    hcov_generate_consensus.R ${sample} ${remapped_bam} ${mapped_bam} ${reference_fa} \
         final_consensus.fasta mapping_stats.csv
     """
 }
 
 // TODO: check if prokka needs contigs to be >20 chars long
-process prokka_annnotations {
+process prokka_annotations {
     container "quay.io/biocontainers/prokka:1.14.6--pl526_0"
     publishDir "${params.output}/${sample}/", mode:"copy", overwrite: true
 
@@ -317,31 +323,27 @@ process prokka_annnotations {
     output:
         val(sample) into submit
         file("genbank/*")
-        file("${sample}.${task.process}.fasta") into for_prokka_reporting
 
     """
     prokka --cpus ${task.cpus} --kingdom "Viruses" --genus "Betacoronavirus" --usegenus --outdir genbank --prefix ${sample} --proteins ${ref} ${fasta}
-    cp genbank/${sample}.fna ${sample}.${task.process}.fasta
     """
 }
 
-process sample_counts {
+process sample_report {
     container "python:3.8.2-buster"
     publishDir params.output, mode: "copy", overwrite: true
 
     input:
-        file(samples) from for_raw_sample_report.concat(
-                                for_trim_sample_report,
-                                for_filter_sample_report,
-                                for_scaffs_sample_report,
-                                for_filter_scaffs_sample_report,
-                                for_scaffs_consensus_report,
-                                for_prokka_reporting).collect()
+        file('*.csv') from raw_stats.concat(
+                            mapped_reads_ref_counts,
+                            scaffolds_stats,
+                            mapping_stats).collect()
+
     output:
-        file('counts.csv')
+        file("report.csv")
 
     """
-    counts.py --sortby filter_viral --out counts.csv ${samples}
+    sample_report.py --out report.csv sample,run,R1,R2,length,raw_read_count,mapped_reads_ref,mean_coverage,perc_Ns,analysis_date *.csv
     """
 }
 
