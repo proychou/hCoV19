@@ -45,16 +45,17 @@ process prokka_db {
 
 process parse_sample_list {
     container "python:3.8.2-buster"
+    publishDir params.output, mode: "copy", overwrite: true
 
     input:
         path(datadir) from Channel.fromPath(params.datadir)
 
     output:
-        file("stats.csv") into raw_stats
+        file("sample_stats.csv") into raw_stats
         file("samples.csv") into (sample_list, for_prereport)
 
     """
-    sample_list.py --out stats.csv --samplelist samples.csv --take ${params.take} ${datadir}
+    sample_list.py --out sample_stats.csv --samplelist samples.csv --take ${params.take} ${datadir}
     """
 }
 
@@ -81,8 +82,7 @@ process trimming {
     input:
         tuple(val(sample), file(fastq)) from sample_list.splitCsv().map{ [it[0], file(it[1])] }
     output:
-        tuple(val(sample), file("trimmed.fastq.gz")) into (trimmed, for_reference_mapping)
-        file("trimmed.fastq.gz") into (for_trim_sample_report, for_consensus_mapping)
+        tuple(val(sample), file("trimmed.fastq.gz")) into (trimmed, for_reference_mapping, for_consensus_mapping)
 
     // bbduk --help: When piping interleaving must be explicitly stated: int=f unpaired, int=t for paired
     """
@@ -146,7 +146,7 @@ process filter_viral {
         tuple(val(sample), file(fastq)) from trimmed
         file(ref) from reference_fa
     output:
-        tuple(val(sample), file("viral.fastq.gz")) into (processed, for_viral_stats)
+        tuple(val(sample), file("viral.fastq.gz")) into processed
         file("viral.fastq.gz") into for_processed_report
         file("unmatched.fastq.gz")
         file("stats_filtering.txt")
@@ -195,7 +195,7 @@ process filter_scaffolds {
     input:
         tuple(val(sample), file(scaffolds)) from scaffolds
     output:
-        tuple(val(sample), file('filtered_scaffolds.fasta')) into filtered_scaffolds
+        tuple(val(sample), file("filtered_scaffolds.fasta")) into filtered_scaffolds
         file("stats.csv") into scaffolds_stats
 
     //TODO: min_len and min_cov as params?
@@ -225,7 +225,6 @@ process align_scaffolds {
 
 process scaffolds_sam_to_bam {
     container 'quay.io/biocontainers/samtools:1.10--h9402c20_2'
-    publishDir "${params.output}/${sample}/", mode: "copy", overwrite: true
 
     input:
         tuple(val(sample), file(contig_sam)) from aligned_contigs
@@ -249,7 +248,7 @@ process scaffolds_bam_to_consensus {
         tuple(val(sample), file(bam)) from filtered_scaffold_bam
         file(ref_fa) from reference_fa
     output:
-        file('scaffold_consensus.fasta') into consensus
+        tuple(val(sample), file('scaffold_consensus.fasta')) into consensus
 
     """
     make_ref_from_assembly.R ${bam} ${ref_fa} scaffold_consensus.fasta
@@ -260,9 +259,9 @@ process bowtie_build_consensus {
     container "quay.io/biocontainers/bowtie2:2.4.1--py38he513fc3_0"
 
     input:
-        file("consensus.fasta") from consensus
+        tuple(val(sample), file("consensus.fasta")) from consensus
     output:
-        file("*.bt2") into consensus_build
+        tuple(val(sample), file("*.bt2")) into consensus_build
 
     """
     bowtie2-build --threads ${task.cpus} consensus.fasta reference
@@ -273,10 +272,9 @@ process map_to_consensus {
     container "quay.io/biocontainers/bowtie2:2.4.1--py38he513fc3_0"
 
     input:
-        file(fastq) from for_consensus_mapping
-        file("") from consensus_build
+        tuple(val(sample), file(fastq), file("")) from for_consensus_mapping.join(consensus_build)
     output:
-        file("alignment.sam") into remap_sam
+        tuple(val(sample), file("alignment.sam")) into remap_sam
 
     """
     bowtie2 --threads ${task.cpus} -x reference -U ${fastq} -S alignment.sam
@@ -287,9 +285,9 @@ process consensus_sam_to_bam {
     container "quay.io/biocontainers/samtools:1.10--h9402c20_2"
 
     input:
-        file("alignment.sam") from remap_sam
+        tuple(val(sample), file("alignment.sam")) from remap_sam
     output:
-        file("remap_sorted.bam") into remap_sorted
+        tuple(val(sample), file("remap_sorted.bam")) into remap_sorted
 
     """
     samtools view --threads ${task.cpus} -b alignment.sam |
@@ -302,13 +300,11 @@ process final_consensus {
     publishDir "${params.output}/${sample}/", mode:"copy", overwrite: true
 
     input:
-        file(remapped_bam) from remap_sorted
-        tuple(val(sample), file(mapped_bam)) from sorted
+        tuple(val(sample), file(mapped_bam), file(remapped_bam)) from sorted.join(remap_sorted)
     output:
         tuple(val(sample), file('final_consensus.fasta')) into final_cons
         file('mapping_stats.csv') into mapping_stats
 
-    // TODO: inject sample name -- see val(sample) ^^
     // FIXME: final_cons seqname must be sample name for prokka genbank LOCUS
     """
     hcov_generate_consensus.R ${sample} ${remapped_bam} ${mapped_bam} ${reference_fa} \
@@ -347,7 +343,7 @@ process sample_report {
         file("report.csv")
 
     """
-    sample_report.py --out report.csv sample,run,R1,R2,length,count,mapped_reads_ref,mean_coverage,perc_Ns,date *.csv
+    sample_report.py --out report.csv sample,run,R1,R2,length,raw_read_count,mapped_reads_ref,mean_coverage,perc_Ns,analysis_date *.csv
     """
 }
 
