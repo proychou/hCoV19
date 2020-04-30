@@ -89,9 +89,10 @@ process trimming {
 
     // bbduk --help: When piping interleaving must be explicitly stated: int=f unpaired, int=t for paired
     """
-    bbduk.sh in=${fastq} out=stdout.fq hdist=2 interleaved=f k=21 ktrim=r mink=4 ref=adapters,artifacts threads=${task.cpus} |
-    bbduk.sh in=stdin.fq out=stdout.fq hdist=2 interleaved=f k=21 ktrim=l mink=4 ref=adapters,artifacts threads=${task.cpus} |
-    bbduk.sh in=stdin.fq out=trimmed.fastq.gz interleaved=f maq=10 minlen=20 qtrim=rl trimq=20 threads=${task.cpus}
+    df -h
+    bbduk.sh in=${fastq} out=stdout.fq hdist=2 interleaved=f k=21 ktrim=r mink=4 ref=adapters,artifacts threads=${(task.cpus/3).intValue()} |
+    bbduk.sh in=stdin.fq out=stdout.fq hdist=2 interleaved=f k=21 ktrim=l mink=4 ref=adapters,artifacts threads=${(task.cpus/3).intValue()} |
+    bbduk.sh in=stdin.fq out=trimmed.fastq.gz interleaved=f maq=10 minlen=20 qtrim=rl trimq=20 threads=${(task.cpus/3).intValue()}
     """
 }
 
@@ -106,6 +107,7 @@ process map_to_ref {
         tuple(val(sample), file("alignment.sam")) into sam
 
     """
+    df -h
     bowtie2 --threads ${task.cpus} -x reference -U ${fastq} -S alignment.sam
     """
 }
@@ -198,6 +200,7 @@ process filter_scaffolds {
 
     //TODO: min_len and min_cov as params?
     //TODO: output mean coverage
+    // TODO: raise exception if all scaffolds filtered
     """
     filter_scaffolds.R ${sample} ${scaffolds} filtered_scaffolds.fasta stats.csv 200 10
     """
@@ -205,8 +208,6 @@ process filter_scaffolds {
 
 // lifted scaffold alignment out of hcov_make_seq.R
 process align_scaffolds {
-    // TODO: consolidate this and next step in container with bwa and samtools
-
     container 'quay.io/biocontainers/bwa:0.7.17--hed695b0_7'
 
     input:
@@ -303,6 +304,7 @@ process final_consensus {
         file('mapping_stats.csv') into mapping_stats
 
     // FIXME: final_cons seqname must be sample name for prokka genbank LOCUS
+    // TODO: add join(remainder: true) option and allow final_consensus without remap_sam
     """
     hcov_generate_consensus.R ${sample} ${remapped_bam} ${mapped_bam} ${reference_fa} \
         final_consensus.fasta mapping_stats.csv
