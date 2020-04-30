@@ -1,9 +1,27 @@
 // Author: Pavitra Roychoudhury
-Channel.fromPath(params.manifest)
-       .splitCsv(header: true)
-       .take(params.take)
-       .map{ [it['sample'], file(params.datadir + it['fastq'])] }
-       .into{samples; for_raw_stats; for_prereport}
+
+
+if (params.samples){
+    sample_publish_dir = "s3://uwlm-virology-data/hCoV19-output/${params.fcid}/"
+    report_publish_dir = "s3://uwlm-virology-data/hCoV19-output/${params.fcid}/"
+    Channel.from(params.samples)
+           .map { [it[0][2], file(it[1][0])] }
+           .take(params.take ?: -1)
+           .view()
+           .into{samples; for_raw_stats; for_prereport}
+
+} else if (params.manifest) {
+    sample_publish_dir = params.output
+    report_publish_dir = params.output
+    Channel.fromPath(params.manifest)
+           .splitCsv(header: true)
+           .take(params.take)
+           .map{ [it['sample'], file(params.datadir + it['fastq'])] }
+           .into{samples; for_raw_stats; for_prereport}
+} else {
+    error "Error: Please specify either a manifest or a samples list in the params!"
+}
+
 reference_fa = file("refs/NC_045512.fasta")
 reference_gb = file("refs/NC_045512.gb")
 
@@ -52,7 +70,7 @@ process prokka_db {
 // process fastqc_prereport  {
 //     container "quay.io/biocontainers/fastqc:0.11.9--0"
 //     label "fastqc_mem"
-//     publishDir "${params.output}/fastqc/prereport/", mode: "copy", overwrite: true
+//     publishDir "${report_publish_dir}/fastqc/prereport/", mode: "copy", overwrite: true
 //
 //     input:
 //         file("*.fastq.gz") from for_prereport.collect{ it[1] }
@@ -159,7 +177,7 @@ process filter_viral {
 // FastQC report on processed reads
 // process fastqc_processed_report  {
 //     container "quay.io/biocontainers/fastqc:0.11.9--0"
-//     publishDir "${params.output}/fastqc/processed/", mode: "copy", overwrite: true
+//     publishDir "${report_publish_dir}/fastqc/processed/", mode: "copy", overwrite: true
 //
 //     input:
 //         file("*.fastq.gz") from for_processed_report.collect()
@@ -312,7 +330,7 @@ process final_consensus {
 // TODO: check if prokka needs contigs to be >20 chars long
 process prokka_annotations {
     container "quay.io/biocontainers/prokka:1.14.6--pl526_0"
-    publishDir "${params.output}/${sample}/", mode:"copy", overwrite: true
+    publishDir sample_publish_dir, saveAs: {f -> "${sample_id}/${f}"}, mode:"copy", overwrite: true
 
     input:
         tuple(val(sample), file(fasta)) from final_cons
@@ -328,7 +346,7 @@ process prokka_annotations {
 
 process report {
     container "python:3.8.2-buster"
-    publishDir params.output, mode: "copy", overwrite: true
+    publishDir report_publish_dir, mode: "copy", overwrite: true
 
     input:
         file('*.csv') from raw_stats.concat(
@@ -345,7 +363,7 @@ process report {
 
 // process multiqc_report {
 //     container "quay.io/biocontainers/multiqc:1.8--py_2"
-//     publishDir params.output, mode: "copy", overwrite: true
+//     publishDir report_publish_dir, mode: "copy", overwrite: true
 //
 //     input:
 //         file("prereport/*") from prereports
