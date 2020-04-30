@@ -89,7 +89,6 @@ process trimming {
 
     // bbduk --help: When piping interleaving must be explicitly stated: int=f unpaired, int=t for paired
     """
-    df -h
     bbduk.sh in=${fastq} out=stdout.fq hdist=2 interleaved=f k=21 ktrim=r mink=4 ref=adapters,artifacts threads=${(task.cpus/3).intValue()} |
     bbduk.sh in=stdin.fq out=stdout.fq hdist=2 interleaved=f k=21 ktrim=l mink=4 ref=adapters,artifacts threads=${(task.cpus/3).intValue()} |
     bbduk.sh in=stdin.fq out=trimmed.fastq.gz interleaved=f maq=10 minlen=20 qtrim=rl trimq=20 threads=${(task.cpus/3).intValue()}
@@ -107,7 +106,6 @@ process map_to_ref {
         tuple(val(sample), file("alignment.sam")) into sam
 
     """
-    df -h
     bowtie2 --threads ${task.cpus} -x reference -U ${fastq} -S alignment.sam
     """
 }
