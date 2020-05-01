@@ -49,20 +49,20 @@ process prokka_db {
 }
 
 // FastQC report on raw reads
-// process fastqc_prereport  {
-//     container "quay.io/biocontainers/fastqc:0.11.9--0"
-//     label "fastqc_mem"
-//     publishDir "${params.output}/fastqc/prereport/", mode: "copy", overwrite: true
-//
-//     input:
-//         file("*.fastq.gz") from for_prereport.collect{ it[1] }
-//     output:
-//         file("*") into prereports
-//
-//     """
-//     zcat *.fastq.gz | fastqc --threads ${task.cpus} stdin:report
-//     """
-// }
+process fastqc_prereport  {
+    container "quay.io/biocontainers/fastqc:0.11.9--0"
+    label "fastqc_mem"
+    publishDir "${params.output}/fastqc/prereport/", mode: "copy", overwrite: true
+
+    input:
+        file("*.fastq.gz") from for_prereport.collect{ it[1] }
+    output:
+        file("*") into prereports
+
+    """
+    zcat *.fastq.gz | fastqc --threads ${task.cpus} stdin:report
+    """
+}
 
 process generate_raw_stats {
     container "python:3.8.2-buster"
@@ -157,19 +157,19 @@ process filter_viral {
 }
 
 // FastQC report on processed reads
-// process fastqc_processed_report  {
-//     container "quay.io/biocontainers/fastqc:0.11.9--0"
-//     publishDir "${params.output}/fastqc/processed/", mode: "copy", overwrite: true
-//
-//     input:
-//         file("*.fastq.gz") from for_processed_report.collect()
-//     output:
-//        file("*") into processed_reports
-//
-//     """
-//     zcat *.fastq.gz | fastqc --threads ${task.cpus} stdin:report
-//     """
-// }
+process fastqc_processed_report  {
+    container "quay.io/biocontainers/fastqc:0.11.9--0"
+    publishDir "${params.output}/fastqc/processed/", mode: "copy", overwrite: true
+
+    input:
+        file("*.fastq.gz") from for_processed_report.collect()
+    output:
+       file("*") into processed_reports
+
+    """
+    zcat *.fastq.gz | fastqc --threads ${task.cpus} stdin:report
+    """
+}
 
 // Assemble with SPAdes
 // FIXME: fix error here with some samples..
@@ -198,7 +198,7 @@ process filter_scaffolds {
 
     //TODO: min_len and min_cov as params?
     //TODO: output mean coverage
-    // TODO: raise exception if all scaffolds filtered
+    // TODO: raise exception or silently exit if all scaffolds filtered
     """
     filter_scaffolds.R ${sample} ${scaffolds} filtered_scaffolds.fasta stats.csv 200 10
     """
@@ -343,17 +343,17 @@ process report {
     """
 }
 
-// process multiqc_report {
-//     container "quay.io/biocontainers/multiqc:1.8--py_2"
-//     publishDir params.output, mode: "copy", overwrite: true
-//
-//     input:
-//         file("prereport/*") from prereports
-//         file("post_report/*") from processed_reports
-//     output:
-//         file("multiqc_*")
-//
-//     """
-//     multiqc prereport post_report
-//     """
-// }
+process multiqc_report {
+    container "quay.io/biocontainers/multiqc:1.8--py_2"
+    publishDir params.output, mode: "copy", overwrite: true
+
+    input:
+        file("prereport/*") from prereports
+        file("post_report/*") from processed_reports
+    output:
+        file("multiqc_*")
+
+    """
+    multiqc prereport post_report
+    """
+}
