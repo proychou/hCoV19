@@ -113,12 +113,9 @@ process trimming {
         tuple(val(sample), file(fastq)) from samples
     output:
         tuple(val(sample), file("trimmed.fastq.gz")) into (trimmed, for_reference_mapping, for_consensus_mapping)
-
-    // bbduk --help: When piping interleaving must be explicitly stated: int=f unpaired, int=t for paired
     """
-    bbduk.sh in=${fastq} out=stdout.fq hdist=2 interleaved=f k=21 ktrim=r mink=4 ref=adapters,artifacts threads=${task.cpus} |
-    bbduk.sh in=stdin.fq out=stdout.fq hdist=2 interleaved=f k=21 ktrim=l mink=4 ref=adapters,artifacts threads=${task.cpus} |
-    bbduk.sh in=stdin.fq out=trimmed.fastq.gz interleaved=f maq=10 minlen=20 qtrim=rl trimq=20 threads=${task.cpus}
+    bbduk.sh -Xmx${task.memory.toGiga()}g -Djava.io.tmpdir=./ --threads=${task.cpus} \
+        in=stdin.fq out=trimmed.fastq.gz interleaved=f maq=10 minlen=20 qtrim=rl trimq=20 
     """
 }
 
@@ -179,7 +176,8 @@ process filter_viral {
         file("stats_filtering.txt")
 
     """
-    bbduk.sh in=${fastq} out=unmatched.fastq.gz outm=viral.fastq.gz ref=${ref} hdist=2 k=31 stats=stats_filtering.txt --threads=${task.cpus}
+    bbduk.sh -Xmx${task.memory.toGiga()}g -Djava.io.tmpdir=./ --threads=${task.cpus} \
+        in=${fastq} out=unmatched.fastq.gz outm=viral.fastq.gz ref=${ref} hdist=2 k=31 stats=stats_filtering.txt
     """
 }
 
