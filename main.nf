@@ -111,7 +111,7 @@ process trimming {
     output:
         tuple(val(sample), file("trimmed.fastq.gz")) into (trimmed, for_reference_mapping, for_consensus_mapping)
     """
-    bbduk.sh -Xmx${task.memory.toGiga()}g -Djava.io.tmpdir=./ --threads=${task.cpus} \
+    bbduk.sh -Xmx${task.memory.toGiga()}g --threads=${task.cpus} \
         in=stdin.fq out=trimmed.fastq.gz interleaved=f maq=10 minlen=20 qtrim=rl trimq=20 
     """
 }
@@ -172,7 +172,7 @@ process filter_viral {
         file("stats_filtering.txt")
 
     """
-    bbduk.sh -Xmx${task.memory.toGiga()}g -Djava.io.tmpdir=./ --threads=${task.cpus} \
+    bbduk.sh -Xmx${task.memory.toGiga()}g --threads=${task.cpus} \
         in=${fastq} out=unmatched.fastq.gz outm=viral.fastq.gz ref=${ref} hdist=2 k=31 stats=stats_filtering.txt
     """
 }
