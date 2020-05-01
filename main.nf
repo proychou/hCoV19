@@ -207,7 +207,7 @@ process assemble_scaffolds {
         tuple(val(sample), file("scaffolds.fasta")) into scaffolds
 
     """
-    spades.py --careful --memory ${task.memory.toGiga() * 8} --threads ${task.cpus} -s ${fastq} -o .
+    spades.py --careful --memory ${task.memory.toGiga()} --threads ${task.cpus} -s ${fastq} -o .
     """
 }
 
