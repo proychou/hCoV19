@@ -22,8 +22,17 @@ if (params.samples){
     error "Error: Please specify either a manifest or a samples list in the params!"
 }
 
-reference_fa = file("refs/NC_045512.fasta")
-reference_gb = file("refs/NC_045512.gb")
+def maybe_local(fname){
+    // Address the special case of using test files in this project
+    // when running in batchman, or more generally, run-from-git.
+    if(file(fname).exists() || fname.startsWith('s3://')){
+        return file(fname)
+    }else{
+        file("$workflow.projectDir/" + fname)
+    }
+}
+reference_fa = maybe_local("refs/NC_045512.fasta")
+reference_gb = maybe_local("refs/NC_045512.gb")
 
 // TODO: make separate pipeline for reference creation, store in s3
 process bowtie_build {
