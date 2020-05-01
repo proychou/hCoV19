@@ -110,10 +110,13 @@ process trimming {
         tuple(val(sample), file(fastq)) from samples
     output:
         tuple(val(sample), file("trimmed.fastq.gz")) into (trimmed, for_reference_mapping, for_consensus_mapping)
-    """
-    bbduk.sh -Xmx${task.memory.toGiga()}g --threads=${task.cpus} \
-        in=stdin.fq out=trimmed.fastq.gz interleaved=f maq=10 minlen=20 qtrim=rl trimq=20 
-    """
+    script:
+        resource_opts = "-Xmx${(task.memory.toGiga()/3).intValue()}g threads=${(task.cpus/3).intValue()}"
+        """
+        bbduk.sh ${resource_opts} in=${fastq} out=stdout.fq hdist=2 interleaved=f k=21 ktrim=r mink=4 ref=adapters,artifacts |
+        bbduk.sh ${resource_opts} in=stdin.fq out=stdout.fq hdist=2 interleaved=f k=21 ktrim=l mink=4 ref=adapters,artifacts |
+        bbduk.sh ${resource_opts} in=stdin.fq out=trimmed.fastq.gz interleaved=f maq=10 minlen=20 qtrim=rl trimq=20
+        """
 }
 
 // Map reads to reference
