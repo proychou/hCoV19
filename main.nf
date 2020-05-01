@@ -36,8 +36,7 @@ reference_gb = maybe_local("refs/NC_045512.gb")
 
 // TODO: make separate pipeline for reference creation, store in s3
 process bowtie_build {
-    container "quay.io/biocontainers/bowtie2:2.4.1--py38he513fc3_0"
-
+    label 'bowtie2'
     input:
         file(ref) from reference_fa
 
@@ -50,8 +49,8 @@ process bowtie_build {
 }
 
 process bwa_index {
-    container "quay.io/biocontainers/bwa:0.7.17--hed695b0_7"
-
+    label 'bwa'
+    
     input:
         file(ref) from reference_fa
     output:
@@ -63,7 +62,7 @@ process bwa_index {
 }
 
 process prokka_db {
-    container "quay.io/biocontainers/prokka:1.14.6--pl526_0"
+    label 'prokka'
 
     input:
         file("reference.gb") from reference_gb
@@ -92,8 +91,7 @@ process prokka_db {
 // }
 
 process generate_raw_stats {
-    container "python:3.8.2-buster"
-
+    label 'python'
     input:
         tuple(val(sample), file(fastq)) from for_raw_stats
 
@@ -107,8 +105,7 @@ process generate_raw_stats {
 
 // Adapter trimming with bbduk
 process trimming {
-    container "quay.io/biocontainers/bbmap:38.79--h516909a_0"
-
+    label 'bbmap'
     input:
         tuple(val(sample), file(fastq)) from samples
     output:
@@ -121,8 +118,7 @@ process trimming {
 
 // Map reads to reference
 process map_to_ref {
-    container "quay.io/biocontainers/bowtie2:2.4.1--py38he513fc3_0"
-
+    label 'bowtie2'
     input:
         tuple(val(sample), file(fastq)) from for_reference_mapping
         file('') from bowtie_ref
@@ -135,7 +131,7 @@ process map_to_ref {
 }
 
 process sam_to_bam {
-    container "quay.io/biocontainers/samtools:1.10--h9402c20_2"
+    label 'samtools'
 
     input:
         tuple(val(sample), file("alignment.sam")) from sam
@@ -149,7 +145,7 @@ process sam_to_bam {
 }
 
 process mapped_reads_ref {
-    container "quay.io/biocontainers/pysam:0.15.4--py37hbcae180_0"
+    label 'pysam'
 
     input:
         tuple(val(sample), file(bam)) from for_counting
@@ -164,7 +160,7 @@ process mapped_reads_ref {
 
 // Use bbduk to filter viral reads
 process filter_viral {
-    container "quay.io/biocontainers/bbmap:38.79--h516909a_0"
+    label 'bbmap'
 
     input:
         tuple(val(sample), file(fastq)) from trimmed
@@ -199,7 +195,7 @@ process filter_viral {
 // Assemble with SPAdes
 // FIXME: fix error here with some samples..
 process assemble_scaffolds {
-    container "quay.io/biocontainers/spades:3.14.0--h2d02072_0"
+    label 'spades'
 
     input:
         tuple(val(sample), file(fastq)) from processed
@@ -213,7 +209,7 @@ process assemble_scaffolds {
 
 // lifted scaffold filtering out of hcov_make_seq.R
 process filter_scaffolds {
-    container 'bioconductor/release_core2:R3.6.2_Bioc3.10'
+    label 'rscript'
 
     input:
         tuple(val(sample), file(scaffolds)) from scaffolds
@@ -231,9 +227,8 @@ process filter_scaffolds {
 // lifted scaffold alignment out of hcov_make_seq.R
 process align_scaffolds {
     // TODO: consolidate this and next step in container with bwa and samtools
-
-    container 'quay.io/biocontainers/bwa:0.7.17--hed695b0_7'
-
+    label 'bwa'
+    
     input:
         tuple(val(sample), file(scaffold)) from filtered_scaffolds
         file(ref_fa) from reference_fa
@@ -247,7 +242,7 @@ process align_scaffolds {
 }
 
 process scaffolds_sam_to_bam {
-    container 'quay.io/biocontainers/samtools:1.10--h9402c20_2'
+    label 'samtools'
 
     input:
         tuple(val(sample), file(contig_sam)) from aligned_contigs
@@ -265,7 +260,7 @@ process scaffolds_sam_to_bam {
 }
 
 process scaffolds_bam_to_consensus {
-    container 'bioconductor/release_core2:R3.6.2_Bioc3.10'
+    label 'rscript'
 
     input:
         tuple(val(sample), file(bam)) from filtered_scaffold_bam
@@ -279,7 +274,7 @@ process scaffolds_bam_to_consensus {
 }
 
 process bowtie_build_consensus {
-    container "quay.io/biocontainers/bowtie2:2.4.1--py38he513fc3_0"
+    label 'bowtie2'
 
     input:
         tuple(val(sample), file("consensus.fasta")) from consensus
@@ -292,7 +287,7 @@ process bowtie_build_consensus {
 }
 
 process map_to_consensus {
-    container "quay.io/biocontainers/bowtie2:2.4.1--py38he513fc3_0"
+    label 'bowtie2'
 
     input:
         tuple(val(sample), file(fastq), file("")) from for_consensus_mapping.join(consensus_build)
@@ -305,7 +300,7 @@ process map_to_consensus {
 }
 
 process consensus_sam_to_bam {
-    container "quay.io/biocontainers/samtools:1.10--h9402c20_2"
+    label 'samtools'
 
     input:
         tuple(val(sample), file("alignment.sam")) from remap_sam
@@ -319,7 +314,7 @@ process consensus_sam_to_bam {
 }
 
 process final_consensus {
-    container 'bioconductor/release_core2:R3.6.2_Bioc3.10'
+    label 'rscript'
 
     input:
         tuple(val(sample), file(mapped_bam), file(remapped_bam)) from sorted.join(remap_sorted)
@@ -336,7 +331,7 @@ process final_consensus {
 
 // TODO: check if prokka needs contigs to be >20 chars long
 process prokka_annotations {
-    container "quay.io/biocontainers/prokka:1.14.6--pl526_0"
+    label 'prokka'
     publishDir sample_publish_dir, saveAs: {f -> "${sample_id}/${f}"}, mode:"copy", overwrite: true
 
     input:
@@ -352,7 +347,7 @@ process prokka_annotations {
 }
 
 process report {
-    container "python:3.8.2-buster"
+    label 'python'
     publishDir report_publish_dir, mode: "copy", overwrite: true
 
     input:
