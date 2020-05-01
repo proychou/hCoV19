@@ -4,9 +4,10 @@
       "title": "Illumina Flowcell ID",
       "default": "AHGCYJBGXF",
       "type": "string"
-    },
+    }
   },
   "required": [
+    "fcid"
   ],
   "type": "object"
 }
