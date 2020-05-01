@@ -92,6 +92,8 @@ process prokka_db {
 
 process generate_raw_stats {
     label 'python'
+    tag "${sample}"
+
     input:
         tuple(val(sample), file(fastq)) from for_raw_stats
 
@@ -106,6 +108,8 @@ process generate_raw_stats {
 // Adapter trimming with bbduk
 process trimming {
     label 'bbmap'
+    tag "${sample}"
+
     input:
         tuple(val(sample), file(fastq)) from samples
     output:
@@ -122,6 +126,8 @@ process trimming {
 // Map reads to reference
 process map_to_ref {
     label 'bowtie2'
+    tag "${sample}"
+
     input:
         tuple(val(sample), file(fastq)) from for_reference_mapping
         file('') from bowtie_ref
@@ -135,6 +141,7 @@ process map_to_ref {
 
 process sam_to_bam {
     label 'samtools'
+    tag "${sample}"
 
     input:
         tuple(val(sample), file("alignment.sam")) from sam
@@ -149,6 +156,7 @@ process sam_to_bam {
 
 process mapped_reads_ref {
     label 'pysam'
+    tag "${sample}"
 
     input:
         tuple(val(sample), file(bam)) from for_counting
@@ -164,6 +172,7 @@ process mapped_reads_ref {
 // Use bbduk to filter viral reads
 process filter_viral {
     label 'bbmap'
+    tag "${sample}"
 
     input:
         tuple(val(sample), file(fastq)) from trimmed
@@ -199,6 +208,7 @@ process filter_viral {
 // FIXME: fix error here with some samples..
 process assemble_scaffolds {
     label 'spades'
+    tag "${sample}"
 
     input:
         tuple(val(sample), file(fastq)) from processed
@@ -213,6 +223,7 @@ process assemble_scaffolds {
 // lifted scaffold filtering out of hcov_make_seq.R
 process filter_scaffolds {
     label 'rscript'
+    tag "${sample}"
 
     input:
         tuple(val(sample), file(scaffolds)) from scaffolds
@@ -231,7 +242,8 @@ process filter_scaffolds {
 process align_scaffolds {
     // TODO: consolidate this and next step in container with bwa and samtools
     label 'bwa'
-    
+    tag "${sample}"
+
     input:
         tuple(val(sample), file(scaffold)) from filtered_scaffolds
         file(ref_fa) from reference_fa
@@ -246,6 +258,7 @@ process align_scaffolds {
 
 process scaffolds_sam_to_bam {
     label 'samtools'
+    tag "${sample}"
 
     input:
         tuple(val(sample), file(contig_sam)) from aligned_contigs
@@ -264,6 +277,7 @@ process scaffolds_sam_to_bam {
 
 process scaffolds_bam_to_consensus {
     label 'rscript'
+    tag "${sample}"
 
     input:
         tuple(val(sample), file(bam)) from filtered_scaffold_bam
@@ -278,6 +292,7 @@ process scaffolds_bam_to_consensus {
 
 process bowtie_build_consensus {
     label 'bowtie2'
+    tag "${sample}"
 
     input:
         tuple(val(sample), file("consensus.fasta")) from consensus
@@ -291,6 +306,7 @@ process bowtie_build_consensus {
 
 process map_to_consensus {
     label 'bowtie2'
+    tag "${sample}"
 
     input:
         tuple(val(sample), file(fastq), file("")) from for_consensus_mapping.join(consensus_build)
@@ -304,6 +320,7 @@ process map_to_consensus {
 
 process consensus_sam_to_bam {
     label 'samtools'
+    tag "${sample}"
 
     input:
         tuple(val(sample), file("alignment.sam")) from remap_sam
@@ -318,6 +335,7 @@ process consensus_sam_to_bam {
 
 process final_consensus {
     label 'rscript'
+    tag "${sample}"
 
     input:
         tuple(val(sample), file(mapped_bam), file(remapped_bam)) from sorted.join(remap_sorted)
@@ -335,6 +353,7 @@ process final_consensus {
 // TODO: check if prokka needs contigs to be >20 chars long
 process prokka_annotations {
     label 'prokka'
+    tag "${sample}"
     publishDir sample_publish_dir, saveAs: {f -> "${sample_id}/${f}"}, mode:"copy", overwrite: true
 
     input:
