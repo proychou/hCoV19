@@ -354,7 +354,7 @@ process final_consensus {
 process prokka_annotations {
     label 'prokka'
     tag "${sample}"
-    publishDir sample_publish_dir, saveAs: {f -> "${sample_id}/${f}"}, mode:"copy", overwrite: true
+    publishDir sample_publish_dir, saveAs: {f -> "${sample}/${f}"}, mode:"copy", overwrite: true
 
     input:
         tuple(val(sample), file(fasta)) from final_cons
