@@ -1,16 +1,41 @@
 // Author: Pavitra Roychoudhury
-Channel.fromPath(params.manifest)
-       .splitCsv(header: true)
-       .take(params.take)
-       .map{ [it['sample'], file(params.datadir + it['fastq'])] }
-       .into{samples; for_raw_stats; for_prereport}
-reference_fa = file("refs/NC_045512.fasta")
-reference_gb = file("refs/NC_045512.gb")
+
+if (params.samples){
+    sample_publish_dir = "s3://uwlm-virology-data/hCoV19-output/${params.fcid}/"
+    report_publish_dir = "s3://uwlm-virology-data/hCoV19-output/${params.fcid}/"
+    Channel.from(params.samples)
+           .map { [it[0][2], file(it[1][0])] }
+           .take(params.take ?: -1)
+           .view()
+           .into{samples; for_raw_stats; for_prereport}
+
+} else if (params.manifest) {
+    sample_publish_dir = params.output
+    report_publish_dir = params.output
+    Channel.fromPath(params.manifest)
+           .splitCsv(header: true)
+           .take(params.take)
+           .map{ [it['sample'], file(params.datadir + it['fastq'])] }
+           .into{samples; for_raw_stats; for_prereport}
+} else {
+    error "Error: Please specify either a manifest or a samples list in the params!"
+}
+
+def maybe_local(fname){
+    // Address the special case of using test files in this project
+    // when running in batchman, or more generally, run-from-git.
+    if(file(fname).exists() || fname.startsWith('s3://')){
+        return file(fname)
+    }else{
+        file("$workflow.projectDir/" + fname)
+    }
+}
+reference_fa = maybe_local("refs/NC_045512.fasta")
+reference_gb = maybe_local("refs/NC_045512.gb")
 
 // TODO: make separate pipeline for reference creation, store in s3
 process bowtie_build {
-    container "quay.io/biocontainers/bowtie2:2.4.1--py38he513fc3_0"
-
+    label 'bowtie2'
     input:
         file(ref) from reference_fa
 
@@ -23,7 +48,7 @@ process bowtie_build {
 }
 
 process bwa_index {
-    container "quay.io/biocontainers/bwa:0.7.17--hed695b0_7"
+    label 'bwa'
 
     input:
         file(ref) from reference_fa
@@ -36,7 +61,7 @@ process bwa_index {
 }
 
 process prokka_db {
-    container "quay.io/biocontainers/prokka:1.14.6--pl526_0"
+    label 'prokka'
 
     input:
         file("reference.gb") from reference_gb
@@ -65,7 +90,8 @@ process fastqc_prereport  {
 }
 
 process generate_raw_stats {
-    container "python:3.8.2-buster"
+    label 'python'
+    tag "${sample}"
 
     input:
         tuple(val(sample), file(fastq)) from for_raw_stats
@@ -80,7 +106,8 @@ process generate_raw_stats {
 
 // Adapter trimming with bbduk
 process trimming {
-    container "quay.io/biocontainers/bbmap:38.79--h516909a_0"
+    label 'bbmap'
+    tag "${sample}"
 
     input:
         tuple(val(sample), file(fastq)) from samples
@@ -88,6 +115,8 @@ process trimming {
         tuple(val(sample), file("trimmed.fastq.gz")) into (trimmed, for_reference_mapping, for_consensus_mapping)
 
     // bbduk --help: When piping interleaving must be explicitly stated: int=f unpaired, int=t for paired
+    script:
+        resource_opts = "-Xmx${(task.memory.toGiga()/3).intValue()}g threads=${(task.cpus/3).intValue()}"
     """
     bbduk.sh in=${fastq} out=stdout.fq hdist=2 interleaved=f k=21 ktrim=r mink=4 ref=adapters,artifacts threads=${(task.cpus/3).intValue()} |
     bbduk.sh in=stdin.fq out=stdout.fq hdist=2 interleaved=f k=21 ktrim=l mink=4 ref=adapters,artifacts threads=${(task.cpus/3).intValue()} |
@@ -97,7 +126,8 @@ process trimming {
 
 // Map reads to reference
 process map_to_ref {
-    container "quay.io/biocontainers/bowtie2:2.4.1--py38he513fc3_0"
+    label 'bowtie2'
+    tag "${sample}"
 
     input:
         tuple(val(sample), file(fastq)) from for_reference_mapping
@@ -111,7 +141,8 @@ process map_to_ref {
 }
 
 process sam_to_bam {
-    container "quay.io/biocontainers/samtools:1.10--h9402c20_2"
+    label 'samtools'
+    tag "${sample}"
 
     input:
         tuple(val(sample), file("alignment.sam")) from sam
@@ -125,7 +156,8 @@ process sam_to_bam {
 }
 
 process mapped_reads_ref {
-    container "quay.io/biocontainers/pysam:0.15.4--py37hbcae180_0"
+    label 'pysam'
+    tag "${sample}"
 
     input:
         tuple(val(sample), file(bam)) from for_counting
@@ -140,7 +172,8 @@ process mapped_reads_ref {
 
 // Use bbduk to filter viral reads
 process filter_viral {
-    container "quay.io/biocontainers/bbmap:38.79--h516909a_0"
+    label 'bbmap'
+    tag "${sample}"
 
     input:
         tuple(val(sample), file(fastq)) from trimmed
@@ -152,7 +185,8 @@ process filter_viral {
         file("stats_filtering.txt")
 
     """
-    bbduk.sh in=${fastq} out=unmatched.fastq.gz outm=viral.fastq.gz ref=${ref} hdist=2 k=31 stats=stats_filtering.txt --threads=${task.cpus}
+    bbduk.sh -Xmx${task.memory.toGiga()}g --threads=${task.cpus} \
+        in=${fastq} out=unmatched.fastq.gz outm=viral.fastq.gz ref=${ref} hdist=2 k=31 stats=stats_filtering.txt
     """
 }
 
@@ -174,7 +208,8 @@ process fastqc_processed_report  {
 // Assemble with SPAdes
 // FIXME: fix error here with some samples..
 process assemble_scaffolds {
-    container "quay.io/biocontainers/spades:3.14.0--h2d02072_0"
+    label 'spades'
+    tag "${sample}"
 
     input:
         tuple(val(sample), file(fastq)) from processed
@@ -182,13 +217,14 @@ process assemble_scaffolds {
         tuple(val(sample), file("scaffolds.fasta")) into scaffolds
 
     """
-    spades.py --careful --memory ${task.memory.toGiga() * 8} --threads ${task.cpus} -s ${fastq} -o .
+    spades.py --careful --memory ${task.memory.toGiga()} --threads ${task.cpus} -s ${fastq} -o .
     """
 }
 
 // lifted scaffold filtering out of hcov_make_seq.R
 process filter_scaffolds {
-    container 'bioconductor/release_core2:R3.6.2_Bioc3.10'
+    label 'rscript'
+    tag "${sample}"
 
     input:
         tuple(val(sample), file(scaffolds)) from scaffolds
@@ -206,7 +242,9 @@ process filter_scaffolds {
 
 // lifted scaffold alignment out of hcov_make_seq.R
 process align_scaffolds {
-    container 'quay.io/biocontainers/bwa:0.7.17--hed695b0_7'
+    // TODO: consolidate this and next step in container with bwa and samtools
+    label 'bwa'
+    tag "${sample}"
 
     input:
         tuple(val(sample), file(scaffold)) from filtered_scaffolds
@@ -221,7 +259,8 @@ process align_scaffolds {
 }
 
 process scaffolds_sam_to_bam {
-    container 'quay.io/biocontainers/samtools:1.10--h9402c20_2'
+    label 'samtools'
+    tag "${sample}"
 
     input:
         tuple(val(sample), file(contig_sam)) from aligned_contigs
@@ -239,7 +278,8 @@ process scaffolds_sam_to_bam {
 }
 
 process scaffolds_bam_to_consensus {
-    container 'bioconductor/release_core2:R3.6.2_Bioc3.10'
+    label 'rscript'
+    tag "${sample}"
 
     input:
         tuple(val(sample), file(bam)) from filtered_scaffold_bam
@@ -253,7 +293,8 @@ process scaffolds_bam_to_consensus {
 }
 
 process bowtie_build_consensus {
-    container "quay.io/biocontainers/bowtie2:2.4.1--py38he513fc3_0"
+    label 'bowtie2'
+    tag "${sample}"
 
     input:
         tuple(val(sample), file("consensus.fasta")) from consensus
@@ -266,7 +307,8 @@ process bowtie_build_consensus {
 }
 
 process map_to_consensus {
-    container "quay.io/biocontainers/bowtie2:2.4.1--py38he513fc3_0"
+    label 'bowtie2'
+    tag "${sample}"
 
     input:
         tuple(val(sample), file(fastq), file("")) from for_consensus_mapping.join(consensus_build)
@@ -279,7 +321,8 @@ process map_to_consensus {
 }
 
 process consensus_sam_to_bam {
-    container "quay.io/biocontainers/samtools:1.10--h9402c20_2"
+    label 'samtools'
+    tag "${sample}"
 
     input:
         tuple(val(sample), file("alignment.sam")) from remap_sam
@@ -293,7 +336,8 @@ process consensus_sam_to_bam {
 }
 
 process final_consensus {
-    container 'bioconductor/release_core2:R3.6.2_Bioc3.10'
+    label 'rscript'
+    tag "${sample}"
 
     input:
         tuple(val(sample), file(mapped_bam), file(remapped_bam)) from sorted.join(remap_sorted)
@@ -311,8 +355,9 @@ process final_consensus {
 
 // TODO: check if prokka needs contigs to be >20 chars long
 process prokka_annotations {
-    container "quay.io/biocontainers/prokka:1.14.6--pl526_0"
-    publishDir "${params.output}/${sample}/", mode:"copy", overwrite: true
+    label 'prokka'
+    tag "${sample}"
+    publishDir sample_publish_dir, saveAs: {f -> "${sample}/${f}"}, mode:"copy", overwrite: true
 
     input:
         tuple(val(sample), file(fasta)) from final_cons
@@ -327,8 +372,8 @@ process prokka_annotations {
 }
 
 process report {
-    container "python:3.8.2-buster"
-    publishDir params.output, mode: "copy", overwrite: true
+    label 'python'
+    publishDir report_publish_dir, mode: "copy", overwrite: true
 
     input:
         file('*.csv') from raw_stats.concat(
@@ -357,3 +402,4 @@ process multiqc_report {
     multiqc prereport post_report
     """
 }
+
