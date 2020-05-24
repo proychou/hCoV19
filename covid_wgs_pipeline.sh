@@ -29,22 +29,17 @@
 
 #### Usage ####
 #For paired-end library
-#		hsv1_pipeline.sh -1 yourreads_r1.fastq.gz -2 yourreads_r2.fastq.gz
+#		covid_wgs_pipeline.sh -1 yourreads_r1.fastq.gz -2 yourreads_r2.fastq.gz \
+#								-s samplename -aqpf
 #For single-end library
-#		hsv1_pipeline.sh -s yourreads.fastq.gz
+#		covid_wgs_pipeline.sh -u yourreads.fastq.gz -s samplename -aqpf
 #This is meant to be run on the cluster (typically through sbatch) so if run locally,
 #first set the environment variable manually, e.g.
 #		SLURM_CPUS_PER_TASK=8
 #or whatever is the number of available processors 
  
 #Load required tools
-#Note that spades and last are all locally installed and need to be updated manually as required
-
-
-#Test run
-# in_fastq_r1='/fh/fast/jerome_k/SR/ngs/illumina/proychou/190222_D00300_0682_BHTMLLBCX2/Unaligned/Project_jboonyar/Sample_GH100084/GH100084_GGAGATTC-GTTCAGAC_L002_R1_001.fastq.gz'
-# in_fastq_r2='/fh/fast/jerome_k/SR/ngs/illumina/proychou/190222_D00300_0682_BHTMLLBCX2/Unaligned/Project_jboonyar/Sample_GH100084/GH100084_GGAGATTC-GTTCAGAC_L002_R2_001.fastq.gz'
-# SLURM_CPUS_PER_TASK=8
+#Note that spades is locally installed and need to be updated manually as required
 
 
 PATH=$PATH:$HOME/.local/bin:$HOME/SPAdes-3.14.0-Linux/bin:
@@ -69,6 +64,8 @@ while getopts ":1:2:u:s:faq" opt; do
 		;;
 		q) qual_trim="true"
 		;;
+		p) primer_trim="true"
+		;;
 		s) sampname="$OPTARG"
 		;;
 		\?) echo "Invalid option -$OPTARG" >&2
@@ -89,73 +86,113 @@ then
 
 printf "Paired-end runs not tested yet. Exiting."
 
-# then
-# if [ -z $in_fastq_r1 ] || [ -z $in_fastq_r2 ]
-# then
-# echo "Missing input argument."
-# fi
-# 
-# sampname=$(basename ${in_fastq_r1%%_R1_001.fastq*})
-# 
-# #FastQC report on raw reads
-# printf "\n\nFastQC report on raw reads ... \n\n\n"
-# mkdir -p ./fastqc_reports_raw
-# fastqc $in_fastq_r1 $in_fastq_r2 -o ./fastqc_reports_raw -t $SLURM_CPUS_PER_TASK  
-# 
-# #Adapter trimming with bbduk
-# printf "\n\nAdapter trimming ... \n\n\n"
-# mkdir -p ./preprocessed_fastq
-# bbduk.sh in1=$in_fastq_r1 in2=$in_fastq_r2  out1='./preprocessed_fastq/'$sampname'_trimmed_r1_tmp.fastq.gz' out2='./preprocessed_fastq/'$sampname'_trimmed_r2_tmp.fastq.gz' ref=adapters,artifacts k=21 ktrim=r mink=4 hdist=2 overwrite=TRUE t=$SLURM_CPUS_PER_TASK 
-# bbduk.sh in1='./preprocessed_fastq/'$sampname'_trimmed_r1_tmp.fastq.gz' in2='./preprocessed_fastq/'$sampname'_trimmed_r2_tmp.fastq.gz'  out1='./preprocessed_fastq/'$sampname'_trimmed_r1.fastq.gz' out2='./preprocessed_fastq/'$sampname'_trimmed_r2.fastq.gz' ref=adapters,artifacts k=21 ktrim=l mink=4 hdist=2 overwrite=TRUE t=$SLURM_CPUS_PER_TASK 
-# rm './preprocessed_fastq/'$sampname'_trimmed_r1_tmp.fastq.gz' './preprocessed_fastq/'$sampname'_trimmed_r2_tmp.fastq.gz'
-# 
+then
+if [ -z $in_fastq_r1 ] || [ -z $in_fastq_r2 ]
+then
+echo "Missing input argument."
+fi
+
+
+#FastQC report on raw reads
+printf "\n\nFastQC report on raw reads ... \n\n\n"
+mkdir -p ./fastqc_reports_raw
+fastqc $in_fastq_r1 $in_fastq_r2 -o ./fastqc_reports_raw -t $SLURM_CPUS_PER_TASK  
+
+
+#Adapter trimming with bbduk
+if [[ $adapter_trim == "true" ]]
+then
+printf "\n\nAdapter trimming ... \n\n\n"
+mkdir -p ./preprocessed_fastq
+tmp_fastq1='./preprocessed_fastq/'$sampname'_trimmed_r1_tmp.fastq.gz'
+tmp_fastq2='./preprocessed_fastq/'$sampname'_trimmed_r2_tmp.fastq.gz'
+processed_fastq1='./preprocessed_fastq/'$sampname'_trimmed_r1.fastq.gz'
+processed_fastq2='./preprocessed_fastq/'$sampname'_trimmed_r2.fastq.gz'
+
+bbduk.sh in1=$in_fastq_r1 in2=$in_fastq_r2 out1=$tmp_fastq1 out2=tmp_fastq2 ref=adapters,artifacts k=21 ktrim=r mink=4 hdist=2 overwrite=TRUE t=$SLURM_CPUS_PER_TASK 
+
+bbduk.sh in1=$tmp_fastq1 in2=$tmp_fastq2 out1=$processed_fastq1 out2=processed_fastq2 ref=adapters,artifacts k=21 ktrim=l mink=4 hdist=2 overwrite=TRUE t=$SLURM_CPUS_PER_TASK 
+rm $tmp_fastq1 $tmp_fastq2
+
+else
+processed_fastq1=$in_fastq_r1 
+processed_fastq2=$in_fastq_r2
+fi
+
+
+#Primer trimming: settings based on discussions in SPHERES consortium
+if [[ $primer_trim == "true" ]]
+then
+printf "\n\nAdapter trimming ... \n\n\n"
+mkdir -p ./preprocessed_fastq
+tmp_fastq1=$processed_fastq1
+tmp_fastq2=$processed_fastq2
+processed_fastq1='./preprocessed_fastq/'$sampname'_trimmed2_r1.fastq.gz'
+processed_fastq2='./preprocessed_fastq/'$sampname'_trimmed2_r2.fastq.gz'
+
+bbduk.sh in1=$tmp_fastq1 in2=$tmp_fastq2 out1=$processed_fastq1 out2=processed_fastq2  ref=./refs/swift_primers.fasta k=18 ktrim=l hdist=3 qhdist=1 rcomp=f overwrite=TRUE restrictleft=30 t=$SLURM_CPUS_PER_TASK 
+
+rm $tmp_fastq1 $tmp_fastq2
+tmp_fastq1=$processed_fastq1
+tmp_fastq2=$processed_fastq2
+processed_fastq1='./preprocessed_fastq/'$sampname'_trimmed3_r1.fastq.gz'
+processed_fastq2='./preprocessed_fastq/'$sampname'_trimmed3_r2.fastq.gz'
+bbduk.sh in1=$tmp_fastq1 in2=$tmp_fastq2 out1=$processed_fastq1 out2=processed_fastq2 ref=./refs/swift_primers.fasta k=18 ktrim=r hdist=3 qhdist=1 rcomp=f overwrite=TRUE restrictright=30 t=$SLURM_CPUS_PER_TASK 
+rm $tmp_fastq1 $tmp_fastq2
+
+fi
+
+
 # #Quality trimming
-# printf "\n\nQuality trimming ... \n\n\n"
-# mkdir -p ./preprocessed_fastq
-# bbduk.sh in1='./preprocessed_fastq/'$sampname'_trimmed_r1.fastq.gz' in2='./preprocessed_fastq/'$sampname'_trimmed_r2.fastq.gz' out1='./preprocessed_fastq/'$sampname'_preprocessed_paired_r1.fastq.gz' out2='./preprocessed_fastq/'$sampname'_preprocessed_paired_r2.fastq.gz' t=$SLURM_CPUS_PER_TASK qtrim=rl trimq=20 maq=10 overwrite=TRUE minlen=20
-# 
-# #Delete the trimmed fastqs
-# rm './preprocessed_fastq/'$sampname'_trimmed_r1.fastq.gz' './preprocessed_fastq/'$sampname'_trimmed_r2.fastq.gz' 
-# 
-# 
-# #Use bbduk to filter reads that match Tp genomes
-# if [[ $filter == "true" ]]
-# then
-# printf "\n\nK-mer filtering using Tp_refs.fasta ... \n\n\n"
-# 
-# bbduk.sh in1='./preprocessed_fastq/'$sampname'_preprocessed_paired_r1.fastq.gz' in2='./preprocessed_fastq/'$sampname'_preprocessed_paired_r2.fastq.gz' out1='./preprocessed_fastq/'$sampname'_unmatched_r1.fastq.gz' out2='./preprocessed_fastq/'$sampname'_unmatched_r2.fastq.gz' outm1='./preprocessed_fastq/'$sampname'_matched_r1.fastq.gz' outm2='./preprocessed_fastq/'$sampname'_matched_r2.fastq.gz' ref='./refs/Tp_refs.fasta' k=31 hdist=2 stats='./preprocessed_fastq/'$sampname'_stats_tp.txt' overwrite=TRUE t=$SLURM_CPUS_PER_TASK
-# 
-# rm './preprocessed_fastq/'$sampname'_unmatched_r1.fastq.gz' './preprocessed_fastq/'$sampname'_unmatched_r2.fastq.gz'
-# 
-# #rename and keep original prior to filtering if needed later
-# mv './preprocessed_fastq/'$sampname'_preprocessed_paired_r1.fastq.gz' 
-# './preprocessed_fastq/'$sampname'_preprocessed_paired_before_filter_r1.fastq.gz'
-# mv './preprocessed_fastq/'$sampname'_preprocessed_paired_r2.fastq.gz' 
-# './preprocessed_fastq/'$sampname'_preprocessed_paired_before_filter_r2.fastq.gz'
-# mv './preprocessed_fastq/'$sampname'_matched_r1.fastq.gz' './preprocessed_fastq/'$sampname'_preprocessed_paired_r1.fastq.gz'
-# mv './preprocessed_fastq/'$sampname'_matched_r2.fastq.gz' './preprocessed_fastq/'$sampname'_preprocessed_paired_r2.fastq.gz'
-# fi
-# 
-# 
-# #FastQC report on processed reads
-# mkdir -p ./fastqc_reports_preprocessed
-# printf "\n\nFastQC report on preprocessed reads ... \n\n\n"
-# fastqc './preprocessed_fastq/'$sampname'_preprocessed_paired_r1.fastq.gz' './preprocessed_fastq/'$sampname'_preprocessed_paired_r2.fastq.gz' -o ./fastqc_reports_preprocessed -t $SLURM_CPUS_PER_TASK 
-# 
-# 
-# #Map reads to reference
-# printf "\n\nMapping reads to reference ... \n\n\n"
-# mkdir -p ./mapped_reads
-# bowtie2 -x ./refs/NC_021508 -1 './preprocessed_fastq/'$sampname'_preprocessed_paired_r1.fastq.gz' -2 './preprocessed_fastq/'$sampname'_preprocessed_paired_r2.fastq.gz' -p ${SLURM_CPUS_PER_TASK} | samtools view -bS - > './mapped_reads/'$sampname'.bam'
-# samtools sort -o './mapped_reads/'$sampname'.sorted.bam' './mapped_reads/'$sampname'.bam' 
-# rm './mapped_reads/'$sampname'.bam' 
-# 
-# #Assemble with SPAdes 
-# printf "\n\nStarting de novo assembly ... \n\n\n"
-# mkdir -p './contigs/'$sampname
-# # spades.py -1 './preprocessed_fastq/'$sampname'_preprocessed_paired_r1.fastq.gz' -2 './preprocessed_fastq/'$sampname'_preprocessed_paired_r2.fastq.gz' -o './contigs/'$sampname --careful -t ${SLURM_CPUS_PER_TASK}
-# 
-# ~/Unicycler/unicycler-runner.py -1 './preprocessed_fastq/'$sampname'_preprocessed_paired_r1.fastq.gz' -2 './preprocessed_fastq/'$sampname'_preprocessed_paired_r2.fastq.gz' -o ./contigs/$sampname/ -t ${SLURM_CPUS_PER_TASK} --pilon_path ~/pilon-1.23.jar
+if [[ $qual_trim == "true" ]]
+then
+printf "\n\nQuality trimming ... \n\n\n"
+mkdir -p ./preprocessed_fastq
+processed_fastq_old1=$processed_fastq1
+processed_fastq_old2=$processed_fastq2
+processed_fastq1='./preprocessed_fastq/'$sampname'_preprocessed_r1.fastq.gz'
+processed_fastq2='./preprocessed_fastq/'$sampname'_preprocessed_r2.fastq.gz'
+
+bbduk.sh in1=$processed_fastq_old1 in2=$processed_fastq_old2 out1=$processed_fastq1 out2=$processed_fastq2 t=$SLURM_CPUS_PER_TASK qtrim=rl trimq=20 maq=10 overwrite=TRUE minlen=20
+rm $processed_fastq_old1 $processed_fastq_old2
+fi
+
+#Map reads to reference
+printf "\n\nMapping reads to reference ... \n\n\n"
+mkdir -p ./mapped_reads
+mappedtoref_bam='./mapped_reads/'$sampname'.bam'
+bowtie2 -x ./refs/$ref_bowtie -1 $processed_fastq1 -2 $processed_fastq2 -p ${SLURM_CPUS_PER_TASK} | samtools view -bS - > $mappedtoref_bam
+samtools sort -@ ${SLURM_CPUS_PER_TASK} -o './mapped_reads/'$sampname'.sorted.bam' $mappedtoref_bam 
+rm $mappedtoref_bam 
+mv './mapped_reads/'$sampname'.sorted.bam' $mappedtoref_bam 
+
+
+#Use bbduk to filter viral reads 
+if [[ $filter == "true" ]]
+then
+printf "\n\nK-mer filtering using hcov_refs.fasta ... \n\n\n"
+processed_fastq_old1=$processed_fastq1
+processed_fastq_old2=$processed_fastq2
+processed_fastq1='./preprocessed_fastq/'$sampname'_matched_r1.fastq.gz'
+processed_fastq2='./preprocessed_fastq/'$sampname'_matched_r2.fastq.gz'
+unmatched_fastq1='./filtered_fastq/'$sampname'_unmatched_r1.fastq.gz' 
+unmatched_fastq2='./filtered_fastq/'$sampname'_unmatched_r2.fastq.gz' 
+filter_stats='./preprocessed_fastq/'$sampname'_stats_filtering.txt'
+bbduk.sh in1=$processed_fastq_old1 in2=$processed_fastq_old2 out1=$unmatched_fastq1 out2=$unmatched_fastq2 outm1=$processed_fastq1 outm2=$processed_fastq2 ref=$ref_fasta k=31 hdist=4 stats=$filter_stats overwrite=TRUE t=$SLURM_CPUS_PER_TASK
+fi
+ 
+
+#FastQC report on processed reads
+printf "\n\nFastQC report on preprocessed reads ... \n\n\n"
+mkdir -p ./fastqc_reports_preprocessed
+fastqc -o ./fastqc_reports_preprocessed -t $SLURM_CPUS_PER_TASK $processed_fastq1 $processed_fastq2
+
+
+#Assemble with SPAdes
+printf "\n\nStarting de novo assembly ... \n\n\n"
+mkdir -p './contigs/'$sampname
+spades.py -1 $processed_fastq1 -2 $processed_fastq2 -o './contigs/'$sampname --careful -t ${SLURM_CPUS_PER_TASK}
+
 
 
 
@@ -189,6 +226,26 @@ rm $tmp_fastq
 else
 processed_fastq=$in_fastq 
 fi
+
+#Primer trimming
+if [[ $primer_trim == "true" ]]
+then
+printf "\n\nAdapter trimming ... \n\n\n"
+mkdir -p ./preprocessed_fastq
+tmp_fastq=$processed_fastq
+processed_fastq='./preprocessed_fastq/'$sampname'_trimmed2.fastq.gz'
+
+bbduk.sh in=$tmp_fastq out=$processed_fastq ref=/fh/fast/jerome_k/COVID19_WGS/refs/swift_primers.fasta k=18 ktrim=l hdist=3 qhdist=1 rcomp=f overwrite=TRUE restrictleft=30 t=$SLURM_CPUS_PER_TASK 
+
+rm $tmp_fastq
+tmp_fastq=$processed_fastq
+processed_fastq='./preprocessed_fastq/'$sampname'_trimmed3.fastq.gz'
+bbduk.sh in=$tmp_fastq out=$processed_fastq ref=/fh/fast/jerome_k/COVID19_WGS/refs/swift_primers.fasta k=18 ktrim=r hdist=3 qhdist=1 rcomp=f overwrite=TRUE restrictright=30 t=$SLURM_CPUS_PER_TASK 
+rm $tmp_fastq
+
+else
+processed_fastq=$in_fastq 
+fi
   
 #Quality trimming
 if [[ $qual_trim == "true" ]]
@@ -199,6 +256,7 @@ processed_fastq_old=$processed_fastq
 processed_fastq='./preprocessed_fastq/'$sampname'_preprocessed.fastq.gz'
 
 bbduk.sh in=$processed_fastq_old out=$processed_fastq t=$SLURM_CPUS_PER_TASK qtrim=rl trimq=20 maq=10 overwrite=TRUE minlen=20
+rm $processed_fastq_old
 fi
 
 #Map reads to reference
@@ -219,7 +277,7 @@ processed_fastq_old=$processed_fastq
 processed_fastq='./preprocessed_fastq/'$sampname'_matched.fastq.gz'
 unmatched_fastq='./filtered_fastq/'$sampname'_unmatched.fastq.gz' 
 filter_stats='./preprocessed_fastq/'$sampname'_stats_filtering.txt'
-bbduk.sh in=$processed_fastq_old out=$unmatched_fastq outm=$processed_fastq ref=$ref_fasta k=31 hdist=2 stats=$filter_stats overwrite=TRUE t=$SLURM_CPUS_PER_TASK
+bbduk.sh in=$processed_fastq_old out=$unmatched_fastq outm=$processed_fastq ref=$ref_fasta k=31 hdist=4 stats=$filter_stats overwrite=TRUE t=$SLURM_CPUS_PER_TASK
 else 
 processed_fastq='./preprocessed_fastq/'$sampname'_preprocessed.fastq.gz'
 fi
