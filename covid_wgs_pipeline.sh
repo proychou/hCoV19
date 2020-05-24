@@ -86,7 +86,7 @@ then
 
 printf "Paired-end runs not tested yet. Exiting."
 
-then
+
 if [ -z $in_fastq_r1 ] || [ -z $in_fastq_r2 ]
 then
 echo "Missing input argument."
