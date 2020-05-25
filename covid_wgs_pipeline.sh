@@ -178,7 +178,7 @@ processed_fastq2='./preprocessed_fastq/'$sampname'_matched_r2.fastq.gz'
 unmatched_fastq1='./filtered_fastq/'$sampname'_unmatched_r1.fastq.gz' 
 unmatched_fastq2='./filtered_fastq/'$sampname'_unmatched_r2.fastq.gz' 
 filter_stats='./preprocessed_fastq/'$sampname'_stats_filtering.txt'
-bbduk.sh in1=$processed_fastq_old1 in2=$processed_fastq_old2 out1=$unmatched_fastq1 out2=$unmatched_fastq2 outm1=$processed_fastq1 outm2=$processed_fastq2 ref=$ref_fasta k=31 hdist=4 stats=$filter_stats overwrite=TRUE t=$SLURM_CPUS_PER_TASK
+bbduk.sh in1=$processed_fastq_old1 in2=$processed_fastq_old2 out1=$unmatched_fastq1 out2=$unmatched_fastq2 outm1=$processed_fastq1 outm2=$processed_fastq2 ref=$ref_fasta k=31 hdist=3 stats=$filter_stats overwrite=TRUE t=$SLURM_CPUS_PER_TASK
 fi
  
 
@@ -277,7 +277,7 @@ processed_fastq_old=$processed_fastq
 processed_fastq='./preprocessed_fastq/'$sampname'_matched.fastq.gz'
 unmatched_fastq='./filtered_fastq/'$sampname'_unmatched.fastq.gz' 
 filter_stats='./preprocessed_fastq/'$sampname'_stats_filtering.txt'
-bbduk.sh in=$processed_fastq_old out=$unmatched_fastq outm=$processed_fastq ref=$ref_fasta k=31 hdist=4 stats=$filter_stats overwrite=TRUE t=$SLURM_CPUS_PER_TASK
+bbduk.sh in=$processed_fastq_old out=$unmatched_fastq outm=$processed_fastq ref=$ref_fasta k=31 hdist=3 stats=$filter_stats overwrite=TRUE t=$SLURM_CPUS_PER_TASK
 else 
 processed_fastq='./preprocessed_fastq/'$sampname'_preprocessed.fastq.gz'
 fi
