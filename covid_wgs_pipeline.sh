@@ -47,7 +47,7 @@ export PATH=$PATH:$EBROOTPROKKA/bin:$EBROOTPROKKA/db:
 echo "Number of cores used: "$SLURM_CPUS_PER_TASK
 # echo "Path: "$PATH
 
-while getopts ":1:2:u:s:faq" opt; do
+while getopts ":1:2:u:s:fapq" opt; do
 	case $opt in
 		1) in_fastq_r1="$OPTARG"
 			paired="true"
@@ -123,7 +123,7 @@ fi
 #Primer trimming: settings based on discussions in SPHERES consortium
 if [[ $primer_trim == "true" ]]
 then
-printf "\n\nAdapter trimming ... \n\n\n"
+printf "\n\nPrimer trimming ... \n\n\n"
 mkdir -p ./preprocessed_fastq
 tmp_fastq1=$processed_fastq1
 tmp_fastq2=$processed_fastq2
@@ -230,7 +230,7 @@ fi
 #Primer trimming
 if [[ $primer_trim == "true" ]]
 then
-printf "\n\nAdapter trimming ... \n\n\n"
+printf "\n\nPrimer trimming ... \n\n\n"
 mkdir -p ./preprocessed_fastq
 tmp_fastq=$processed_fastq
 processed_fastq='./preprocessed_fastq/'$sampname'_trimmed2.fastq.gz'
