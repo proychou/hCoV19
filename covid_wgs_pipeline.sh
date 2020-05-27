@@ -227,7 +227,6 @@ else
 processed_fastq=$in_fastq 
 fi
 
-
   
 #Quality trimming
 if [[ $qual_trim == "true" ]]
@@ -240,6 +239,7 @@ processed_fastq='./preprocessed_fastq/'$sampname'_preprocessed.fastq.gz'
 bbduk.sh in=$processed_fastq_old out=$processed_fastq t=$SLURM_CPUS_PER_TASK qtrim=rl trimq=20 maq=10 overwrite=TRUE minlen=20
 rm $processed_fastq_old
 fi
+
 
 #Primer trimming -- this assumes longer reads, so setting minimum read length to 75 if using primer trimming
 if [[ $primer_trim == "true" ]]
@@ -257,8 +257,6 @@ processed_fastq='./preprocessed_fastq/'$sampname'_trimmed3.fastq.gz'
 bbduk.sh in=$tmp_fastq out=$processed_fastq ref=/fh/fast/jerome_k/COVID19_WGS/refs/swift_primers.fasta k=18 ktrim=r hdist=3 qhdist=1 rcomp=f overwrite=TRUE restrictright=30 t=$SLURM_CPUS_PER_TASK minlen=75
 rm $tmp_fastq
 
-else
-processed_fastq=$in_fastq 
 fi
 
 
