@@ -120,29 +120,6 @@ processed_fastq2=$in_fastq_r2
 fi
 
 
-#Primer trimming: settings based on discussions in SPHERES consortium
-if [[ $primer_trim == "true" ]]
-then
-printf "\n\nPrimer trimming ... \n\n\n"
-mkdir -p ./preprocessed_fastq
-tmp_fastq1=$processed_fastq1
-tmp_fastq2=$processed_fastq2
-processed_fastq1='./preprocessed_fastq/'$sampname'_trimmed2_r1.fastq.gz'
-processed_fastq2='./preprocessed_fastq/'$sampname'_trimmed2_r2.fastq.gz'
-
-bbduk.sh in1=$tmp_fastq1 in2=$tmp_fastq2 out1=$processed_fastq1 out2=processed_fastq2  ref=./refs/swift_primers.fasta k=18 ktrim=l hdist=3 qhdist=1 rcomp=f overwrite=TRUE restrictleft=30 t=$SLURM_CPUS_PER_TASK 
-
-rm $tmp_fastq1 $tmp_fastq2
-tmp_fastq1=$processed_fastq1
-tmp_fastq2=$processed_fastq2
-processed_fastq1='./preprocessed_fastq/'$sampname'_trimmed3_r1.fastq.gz'
-processed_fastq2='./preprocessed_fastq/'$sampname'_trimmed3_r2.fastq.gz'
-bbduk.sh in1=$tmp_fastq1 in2=$tmp_fastq2 out1=$processed_fastq1 out2=processed_fastq2 ref=./refs/swift_primers.fasta k=18 ktrim=r hdist=3 qhdist=1 rcomp=f overwrite=TRUE restrictright=30 t=$SLURM_CPUS_PER_TASK 
-rm $tmp_fastq1 $tmp_fastq2
-
-fi
-
-
 # #Quality trimming
 if [[ $qual_trim == "true" ]]
 then
@@ -156,6 +133,29 @@ processed_fastq2='./preprocessed_fastq/'$sampname'_preprocessed_r2.fastq.gz'
 bbduk.sh in1=$processed_fastq_old1 in2=$processed_fastq_old2 out1=$processed_fastq1 out2=$processed_fastq2 t=$SLURM_CPUS_PER_TASK qtrim=rl trimq=20 maq=10 overwrite=TRUE minlen=20
 rm $processed_fastq_old1 $processed_fastq_old2
 fi
+
+#Primer trimming: settings based on discussions in SPHERES consortium-- this assumes longer reads, so setting minimum read length to 75 if using primer trimming
+if [[ $primer_trim == "true" ]]
+then
+printf "\n\nPrimer trimming ... \n\n\n"
+mkdir -p ./preprocessed_fastq
+tmp_fastq1=$processed_fastq1
+tmp_fastq2=$processed_fastq2
+processed_fastq1='./preprocessed_fastq/'$sampname'_trimmed2_r1.fastq.gz'
+processed_fastq2='./preprocessed_fastq/'$sampname'_trimmed2_r2.fastq.gz'
+
+bbduk.sh in1=$tmp_fastq1 in2=$tmp_fastq2 out1=$processed_fastq1 out2=processed_fastq2  ref=./refs/swift_primers.fasta k=18 ktrim=l hdist=3 qhdist=1 rcomp=f overwrite=TRUE restrictleft=30 t=$SLURM_CPUS_PER_TASK minlen=75
+
+rm $tmp_fastq1 $tmp_fastq2
+tmp_fastq1=$processed_fastq1
+tmp_fastq2=$processed_fastq2
+processed_fastq1='./preprocessed_fastq/'$sampname'_trimmed3_r1.fastq.gz'
+processed_fastq2='./preprocessed_fastq/'$sampname'_trimmed3_r2.fastq.gz'
+bbduk.sh in1=$tmp_fastq1 in2=$tmp_fastq2 out1=$processed_fastq1 out2=processed_fastq2 ref=./refs/swift_primers.fasta k=18 ktrim=r hdist=3 qhdist=1 rcomp=f overwrite=TRUE restrictright=30 t=$SLURM_CPUS_PER_TASK minlen=75
+rm $tmp_fastq1 $tmp_fastq2
+
+fi
+
 
 #Map reads to reference
 printf "\n\nMapping reads to reference ... \n\n\n"
@@ -227,25 +227,7 @@ else
 processed_fastq=$in_fastq 
 fi
 
-#Primer trimming
-if [[ $primer_trim == "true" ]]
-then
-printf "\n\nPrimer trimming ... \n\n\n"
-mkdir -p ./preprocessed_fastq
-tmp_fastq=$processed_fastq
-processed_fastq='./preprocessed_fastq/'$sampname'_trimmed2.fastq.gz'
 
-bbduk.sh in=$tmp_fastq out=$processed_fastq ref=/fh/fast/jerome_k/COVID19_WGS/refs/swift_primers.fasta k=18 ktrim=l hdist=3 qhdist=1 rcomp=f overwrite=TRUE restrictleft=30 t=$SLURM_CPUS_PER_TASK 
-
-rm $tmp_fastq
-tmp_fastq=$processed_fastq
-processed_fastq='./preprocessed_fastq/'$sampname'_trimmed3.fastq.gz'
-bbduk.sh in=$tmp_fastq out=$processed_fastq ref=/fh/fast/jerome_k/COVID19_WGS/refs/swift_primers.fasta k=18 ktrim=r hdist=3 qhdist=1 rcomp=f overwrite=TRUE restrictright=30 t=$SLURM_CPUS_PER_TASK 
-rm $tmp_fastq
-
-else
-processed_fastq=$in_fastq 
-fi
   
 #Quality trimming
 if [[ $qual_trim == "true" ]]
@@ -258,6 +240,27 @@ processed_fastq='./preprocessed_fastq/'$sampname'_preprocessed.fastq.gz'
 bbduk.sh in=$processed_fastq_old out=$processed_fastq t=$SLURM_CPUS_PER_TASK qtrim=rl trimq=20 maq=10 overwrite=TRUE minlen=20
 rm $processed_fastq_old
 fi
+
+#Primer trimming -- this assumes longer reads, so setting minimum read length to 75 if using primer trimming
+if [[ $primer_trim == "true" ]]
+then
+printf "\n\nPrimer trimming ... \n\n\n"
+mkdir -p ./preprocessed_fastq
+tmp_fastq=$processed_fastq
+processed_fastq='./preprocessed_fastq/'$sampname'_trimmed2.fastq.gz'
+
+bbduk.sh in=$tmp_fastq out=$processed_fastq ref=/fh/fast/jerome_k/COVID19_WGS/refs/swift_primers.fasta k=18 ktrim=l hdist=3 qhdist=1 rcomp=f overwrite=TRUE restrictleft=30 t=$SLURM_CPUS_PER_TASK minlen=75
+
+rm $tmp_fastq
+tmp_fastq=$processed_fastq
+processed_fastq='./preprocessed_fastq/'$sampname'_trimmed3.fastq.gz'
+bbduk.sh in=$tmp_fastq out=$processed_fastq ref=/fh/fast/jerome_k/COVID19_WGS/refs/swift_primers.fasta k=18 ktrim=r hdist=3 qhdist=1 rcomp=f overwrite=TRUE restrictright=30 t=$SLURM_CPUS_PER_TASK minlen=75
+rm $tmp_fastq
+
+else
+processed_fastq=$in_fastq 
+fi
+
 
 #Map reads to reference
 printf "\n\nMapping reads to reference ... \n\n\n"
