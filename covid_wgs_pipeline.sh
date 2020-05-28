@@ -131,7 +131,7 @@ processed_fastq1='./preprocessed_fastq/'$sampname'_preprocessed_r1.fastq.gz'
 processed_fastq2='./preprocessed_fastq/'$sampname'_preprocessed_r2.fastq.gz'
 
 bbduk.sh in1=$processed_fastq_old1 in2=$processed_fastq_old2 out1=$processed_fastq1 out2=$processed_fastq2 t=$SLURM_CPUS_PER_TASK qtrim=rl trimq=20 maq=10 overwrite=TRUE minlen=20
-rm $processed_fastq_old1 $processed_fastq_old2
+
 fi
 
 #Primer trimming: settings based on discussions in SPHERES consortium-- this assumes longer reads, so setting minimum read length to 75 if using primer trimming
@@ -237,7 +237,7 @@ processed_fastq_old=$processed_fastq
 processed_fastq='./preprocessed_fastq/'$sampname'_preprocessed.fastq.gz'
 
 bbduk.sh in=$processed_fastq_old out=$processed_fastq t=$SLURM_CPUS_PER_TASK qtrim=rl trimq=20 maq=10 overwrite=TRUE minlen=20
-rm $processed_fastq_old
+
 fi
 
 
