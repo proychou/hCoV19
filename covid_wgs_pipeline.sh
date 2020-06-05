@@ -143,13 +143,13 @@ tmp_fastq2=$processed_fastq2
 processed_fastq1='./preprocessed_fastq/'$sampname'_trimmed2_r1.fastq.gz'
 processed_fastq2='./preprocessed_fastq/'$sampname'_trimmed2_r2.fastq.gz'
 
-bbduk.sh in1=$tmp_fastq1 in2=$tmp_fastq2 out1=$processed_fastq1 out2=processed_fastq2  ref=./refs/swift_primers.fasta k=18 ktrim=l hdist=3 qhdist=1 mink=4 rcomp=f overwrite=TRUE restrictleft=30 t=$SLURM_CPUS_PER_TASK minlen=75
+bbduk.sh in1=$tmp_fastq1 in2=$tmp_fastq2 out1=$processed_fastq1 out2=$processed_fastq2  ref=./refs/swift_primers.fasta k=18 ktrim=l hdist=3 qhdist=1 mink=4 rcomp=f overwrite=TRUE restrictleft=30 t=$SLURM_CPUS_PER_TASK minlen=75
 
 tmp_fastq1=$processed_fastq1
 tmp_fastq2=$processed_fastq2
 processed_fastq1='./preprocessed_fastq/'$sampname'_trimmed3_r1.fastq.gz'
 processed_fastq2='./preprocessed_fastq/'$sampname'_trimmed3_r2.fastq.gz'
-bbduk.sh in1=$tmp_fastq1 in2=$tmp_fastq2 out1=$processed_fastq1 out2=processed_fastq2 ref=./refs/swift_primers.fasta k=18 ktrim=r hdist=3 qhdist=1 mink=4 rcomp=f overwrite=TRUE restrictright=30 t=$SLURM_CPUS_PER_TASK minlen=75
+bbduk.sh in1=$tmp_fastq1 in2=$tmp_fastq2 out1=$processed_fastq1 out2=$processed_fastq2 ref=./refs/swift_primers.fasta k=18 ktrim=r hdist=3 qhdist=1 mink=4 rcomp=f overwrite=TRUE restrictright=30 t=$SLURM_CPUS_PER_TASK minlen=75
 rm $tmp_fastq1 $tmp_fastq2
 
 fi
