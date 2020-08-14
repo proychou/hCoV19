@@ -278,8 +278,6 @@ processed_fastq='./preprocessed_fastq/'$sampname'_matched.fastq.gz'
 unmatched_fastq='./filtered_fastq/'$sampname'_unmatched.fastq.gz' 
 filter_stats='./preprocessed_fastq/'$sampname'_stats_filtering.txt'
 bbduk.sh -Xmx80g in=$processed_fastq_old out=$unmatched_fastq outm=$processed_fastq ref=$ref_fasta k=31 hdist=2 stats=$filter_stats overwrite=TRUE t=$SLURM_CPUS_PER_TASK
-else 
-processed_fastq='./preprocessed_fastq/'$sampname'_preprocessed.fastq.gz'
 fi
 
 #FastQC report on processed reads
