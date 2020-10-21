@@ -1,8 +1,8 @@
-# RSV : This script imports bam files and makes a consensus sequence
+# This script imports bam files and makes a consensus sequence
 # Pavitra Roychoudhury
-# Adapted from hsv_generate_consensus.R on 6-Mar-19
+# Adapted from hsv_generate_consensus.R on Mar 2020
 
-# Built to be called from hhv6_wgs_pipeline.sh with input arguments specifying input filename
+# Built to be called from *_wgs_pipeline.sh with input arguments specifying input filename
 # Requires wgs_functions.R which contains several utility scripts plus multiple R packages listed below
 
 rm(list=ls()); 

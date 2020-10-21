@@ -1,8 +1,8 @@
-# HSV script but works with any viral sequence: This script makes a new reference sequence from de novo assembled scaffolds
+# Originally HSV script but works with any viral sequence: This script makes a new reference sequence from de novo assembled scaffolds
 # Pavitra Roychoudhury
 # Sep 2017
 
-# Built to be called from hsv_wgs_pipeline.sh with input arguments specifying input filename
+# Built to be called from *_wgs_pipeline.sh with input arguments specifying input filename
 # Requires wgs_functions.R which contains several utility scripts plus multiple R packages listed below
 
 rm(list=ls()); 
@@ -30,11 +30,6 @@ if(length(args)==0){
 	}
 }
 
-#For testing
-# sampname='GH120016_CGATCCAC-TCGCGCAT_L002'
-# scaffname=paste0('/fh/fast/jerome_k/RSV_WGS/contigs/',sampname,'/scaffolds.fasta')
-# reffname='./refs/NC_045512.2.fasta'
-# ncores
 
 #First import scaffolds and filter by length (>200) and coverage (>10x)
 contigs<-readDNAStringSet(scaffname,format='fasta')
