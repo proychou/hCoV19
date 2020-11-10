@@ -1,4 +1,5 @@
 # Pipeline for assembly of SARS-CoV-2 sequences
+*Pavitra Roychoudhury*
 
 Uses a combination of de novo assembly and read mapping to generate consensus sequences from raw fastq data. 
 
