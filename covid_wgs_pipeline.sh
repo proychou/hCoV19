@@ -258,6 +258,15 @@ rm $tmp_fastq
 
 fi
 
+#Map reads to reference
+printf "\n\nMapping reads to reference ... \n\n\n"
+mkdir -p ./mapped_reads
+mappedtoref_bam='./mapped_reads/'$sampname'.bam'
+bowtie2 -x ./refs/$ref_bowtie -U $processed_fastq -p ${SLURM_CPUS_PER_TASK} | samtools view -bS -F 4 - > $mappedtoref_bam
+samtools sort -@ ${SLURM_CPUS_PER_TASK} -o './mapped_reads/'$sampname'.sorted.bam' $mappedtoref_bam 
+rm $mappedtoref_bam 
+mv './mapped_reads/'$sampname'.sorted.bam' $mappedtoref_bam 
+
 
 #Use bbduk to filter viral reads 
 if [[ $filter == "true" ]]
@@ -270,20 +279,12 @@ filter_stats='./preprocessed_fastq/'$sampname'_stats_filtering.txt'
 bbduk.sh -Xmx80g in=$processed_fastq_old out=$unmatched_fastq outm=$processed_fastq ref=$ref_fasta k=31 hdist=2 stats=$filter_stats overwrite=TRUE t=$SLURM_CPUS_PER_TASK
 fi
 
-#Map reads to reference
-printf "\n\nMapping reads to reference ... \n\n\n"
-mkdir -p ./mapped_reads
-mappedtoref_bam='./mapped_reads/'$sampname'.bam'
-bowtie2 -x ./refs/$ref_bowtie -U $processed_fastq -p ${SLURM_CPUS_PER_TASK} | samtools view -bS -F 4 - > $mappedtoref_bam
-samtools sort -@ ${SLURM_CPUS_PER_TASK} -o './mapped_reads/'$sampname'.sorted.bam' $mappedtoref_bam 
-rm $mappedtoref_bam 
-mv './mapped_reads/'$sampname'.sorted.bam' $mappedtoref_bam 
-
 
 #FastQC report on processed reads
 printf "\n\nFastQC report on preprocessed reads ... \n\n\n"
 mkdir -p ./fastqc_reports_preprocessed
 fastqc -o ./fastqc_reports_preprocessed -t $SLURM_CPUS_PER_TASK $processed_fastq
+
 
 
 #Assemble with SPAdes
