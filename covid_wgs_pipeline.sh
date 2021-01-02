@@ -329,9 +329,4 @@ mkdir -p ./consensus_seqs
 mkdir -p ./stats
 Rscript --vanilla hcov_generate_consensus.R sampname=\"$sampname\" ref=\"$ref_bowtie\" remapped_bamfname=\"$remapped_bamfname\" mappedtoref_bamfname=\"$mappedtoref_bam\"
 
-#Annotate
-printf "\n\nAnnotating with prokka ... \n\n\n"
-mkdir -p ./annotations_prokka
-prokka --outdir './annotations_prokka/'$sampname'/' --force --kingdom 'Viruses' --genus 'Betacoronavirus' --usegenus --prefix $sampname --proteins ./refs/hcov_proteins.faa  './annotations_prokka/'$sampname'/'$sampname'.fa'
-
-
+printf "\n\nDone! \n\n\n"
